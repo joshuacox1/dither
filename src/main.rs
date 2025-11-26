@@ -1,14 +1,13 @@
 use std::io;
 use image::ImageReader;
 
-use dither::types::*;
-use dither::pic::*;
+use dither::{Oklab, PxImage, DitherOptions, PaletteOptions, Problem};
 
 fn main() {
 
 
     // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
-    let mut img = OkImage::from_path(
+    let mut img = PxImage::from_path(
         //"C:\\Users\\Joshua\\OneDrive\\projects\\dither\\test4x4.png");
          "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\ylscene.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\account\\ken_amada_winter_small.png");
@@ -73,9 +72,13 @@ fn main() {
     // }
 
 
+    let dither_options = DitherOptions {
+        num_samples: 8,
+        matrix_size: 4,
+        strength: 1.0,
+    };
 
-
-    img.knoll_dither(8, 4, &pal);
+    img.knoll_dither(&dither_options, &pal);
     println!("Dithering done");
     img.save_as_srgb_png("meep.png");
 }

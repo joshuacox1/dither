@@ -1,7 +1,7 @@
 //! Wrappers to convert to and from PNG.
 //! It would be nice to support APNG at some point. But for now, just PNG.
 
-pub use super::types::{Oklab, Srgb};
+use super::{Oklab, DitherOptions};
 use image::{ImageReader, Rgb, ImageBuffer};
 
 use std::ops::{Index, IndexMut};
@@ -10,56 +10,12 @@ use rand::{Rng, SeedableRng};
 use rand_xoshiro::{Xoshiro256StarStar};
 
 // /// A 2D array of stuffs.
-pub struct OkImage {
+pub struct PxImage {
     data: Vec<Oklab>,
     dims: (usize, usize),
 }
 
-
-#[derive(Debug, Clone)]
-pub enum PaletteOptions {
-    /// An explicit list of (unique) colours.
-    Explicit(Vec<Oklab>),
-    /// Automatically selects a palette based on the input image.
-    /// (Uses k-means clustering with kmeans++ initialisation.)
-    Auto {
-        /// The number of colors in the image. Zero is an invalid value.
-        num_colors: u8,
-        /// A seed for the random number generator used in palette
-        /// generation.
-        random_seed: u64,
-    },
-}
-
-pub struct DitherOptions {
-    /// Dither matrix side length. Valid values are 2, 4, 8 and 16.
-    matrix_size: u8,
-    /// Number of samples taken of the dither matrix.
-    /// I believe this number should lie between B^2 / 4 and B^2,
-    /// where B = matrix size. Consdier
-    num_samples: u8,
-}
-
-pub struct Problem {
-    input_path: String,
-    palette: PaletteOptions,
-    dither: DitherOptions,
-    output_path: String,
-}
-
-
-pub fn image_from_path() {
-
-}
-
-
-
-
-
-
-
-
-impl OkImage {
+impl PxImage {
     pub fn from_path(s: &str) -> Self {
         // todo: remove these unwraps lol.
         let img = ImageReader::open(s)
@@ -68,23 +24,22 @@ impl OkImage {
         let w = img.width() as usize;
         let h = img.height() as usize;
         let data = img.pixels()
-            .map(|rgb| {
-                let srgb = Srgb { r: rgb[0], g: rgb[1], b: rgb[2] };
-                srgb.to_linear().to_oklab()
-            })
+            .map(|rgb| Oklab::from_srgb_triple(&rgb.0))
             .collect::<Vec<_>>();
         Self::new(data, (w, h))
     }
 
     pub fn save_as_srgb_png(&self, s: &str) {
         // rayon?!
+        // TODO: also, indexed colour?!
+        let (w,h) = self.dims;
         let img = ImageBuffer::from_fn(
-            self.width() as u32,
-            self.height() as u32,
+            w as u32, h as u32,
             |i,j| {
                 let (i,j) = (i as usize, j as usize);
                 let px = self[(i,j)];
-                let srgb = px.to_linear_srgb().to_gamma();
+                // TODO: make this use Oklab methods.
+                let srgb = px.to_srgb();
                 Rgb::<u8>([
                     (srgb.r * 255.0).clamp(0.0, 255.0) as u8,
                     (srgb.g * 255.0).clamp(0.0, 255.0) as u8,
@@ -94,98 +49,61 @@ impl OkImage {
         img.save(s).unwrap();
     }
 
-    pub fn new(data: Vec<Oklab>, dims: (usize, usize)) -> Self {
+    fn new(data: Vec<Oklab>, dims: (usize, usize)) -> Self {
         assert!(data.len() == dims.0*dims.1);
         assert!(data.len() > 0);
         Self { data, dims }
     }
 
-    pub fn width(&self) -> usize { self.dims.0 }
-    pub fn height(&self) -> usize { self.dims.1 }
+    /// The dimensions of the image (width, height). Both will be
+    /// at least `1`.
     pub fn dims(&self) -> (usize, usize) { self.dims }
 
-    pub fn round(&mut self, palette: &[Oklab]) {
-        for d in self.data.iter_mut() {
-            let rounded = palette.iter()
-                .min_by(|p,q| p.sq_dist(d).total_cmp(&q.sq_dist(d)))
-                .unwrap();
-            *d = *rounded;
-        }
-    }
-
+    /// Perform Knoll dithering on the image.
     pub fn knoll_dither(&mut self,
-        n: usize,
-        bayer_size: usize,
+        options: &DitherOptions,
         palette: &[Oklab],
     ) {
         let (w, h) = self.dims;
+        let n = options.num_samples as usize;
+        let b = options.matrix_size as usize;
+
         let mut candidates = vec![Oklab::BLACK; n];
-        let threshold = 0.3f32;
-        let bayer_interped = match bayer_size {
-            4 => interp_bayer(BAYER_4, n),
-            8 => interp_bayer(BAYER_8, n),
-            16 => interp_bayer(BAYER_16, n),
-            _ => panic!("Invalid Bayer matrix size {bayer_size}."),
-        };
+        let bayer_interped = bayer_1d(b, n);
         for j in 0..h {
             for i in 0..w {
                 let pixel = self[(i,j)];
-                let mut goal = pixel;
-                for it in 0..n {
-                    // closest colour to goal. todo: put this out
-                    let closest = palette.iter()
-                        .min_by(|p,q| p.sq_dist(&goal).total_cmp(&q.sq_dist(&goal)))
-                        .unwrap();
-                    let mut diff = pixel - *closest; diff *= threshold;
-                    if i == 0 && j == 0 {
-                        println!("{pixel:?}, {goal:?}");
-                    }
+                Self::knoll_dither_inner(&mut candidates, palette, &pixel,
+                    n, options.strength);
 
-                    goal += diff;
-                    candidates[it] = *closest;
-                }
-                // sort by luminance
-                candidates.sort_unstable_by(|c1,c2|
-                    c1.l.total_cmp(&c2.l));
-
-
-                let bayer_idx = (j % bayer_size)*bayer_size + (i % bayer_size);
-                let bayer_interp = bayer_interped[bayer_idx];
-                let chosen = candidates[bayer_interp];
-
-                if i == 0 && j == 0 {
-                    println!("{candidates:?}, {bayer_idx}, {bayer_interp}");
-                }
-
-                //println!("{i},{j},{candidates:?},{bayer_idx},{bayer_interp}");
-                self[(i,j)] = chosen;
+                let bayer_idx = bayer_interped[(j % b)*b + (i % b)];
+                self[(i,j)] = candidates[bayer_idx];
             }
         }
     }
 
-    // // Overwrites candidates.
-    // fn knoll_dither_inner(
-    //     candidates: &mut [Oklab],
-    //     palette: &[Oklab],
-    //     pixel: &Oklab,
-    //     n: usize,
-    //     threshold: f32)
-    // {
-    //     let mut goal = pixel;
-    //     for it in 0..n {
-    //         // closest colour to goal. todo: put this out
-    //         let closest = palette.iter()
-    //             .min_by(|p,q| p.sq_dist(&goal).total_cmp(&q.sq_dist(&goal)))
-    //             .unwrap();
-    //         let mut diff = pixel - *closest; diff *= threshold;
-    //         goal += diff;
-    //         candidates[it] = *closest;
-    //     }
+    // Overwrites candidates.
+    fn knoll_dither_inner(
+        candidates: &mut [Oklab],
+        palette: &[Oklab],
+        pixel: &Oklab,
+        n: usize,
+        strength: f32)
+    {
+        let mut goal = *pixel;
+        for it in 0..n {
+            let closest = palette.iter()
+                .min_by(|p,q| p.sq_dist(&goal).total_cmp(&q.sq_dist(&goal)))
+                .unwrap();
+            let mut diff = *pixel - *closest; diff *= strength;
+            goal += diff;
+            candidates[it] = *closest;
+        }
 
-    //     // The default order on Oklab colours is increasing by luminance,
-    //     // which is what we need here.
-    //     candidates.sort_unstable();
-    // }
+        // The default order on Oklab colours is increasing by luminance,
+        // which is what we need here.
+        candidates.sort_unstable();
+    }
 
     /// Obtain a representative palette from the image of at most k colours.
     /// k must be positive. The palette will generally consist of
@@ -226,7 +144,7 @@ impl OkImage {
         let mut centroid_idxes = vec![usize::MAX; points.len()];
         // TODO: use doubles? are we worried about f32 accuracy here?
         let mut cluster_counts = vec![0; k];
-        let mut converged = false;
+        let mut converged;
 
         loop {
             converged = true;
@@ -341,7 +259,7 @@ impl OkImage {
     }
 }
 
-impl Index<(usize, usize)> for OkImage {
+impl Index<(usize, usize)> for PxImage {
     type Output = Oklab;
 
     fn index(&self, ij: (usize, usize)) -> &Self::Output {
@@ -355,7 +273,7 @@ impl Index<(usize, usize)> for OkImage {
     }
 }
 
-impl IndexMut<(usize, usize)> for OkImage {
+impl IndexMut<(usize, usize)> for PxImage {
     fn index_mut(&mut self, ij: (usize, usize)) -> &mut Self::Output {
         let (i, j) = ij; let (width, height) = self.dims;
         if i < width && j < height {
@@ -404,6 +322,20 @@ const BAYER_16: [[u8; 16]; 16] = [
     [255, 127, 223, 95, 247, 119, 215, 87, 253, 125, 221, 93, 245, 117, 213, 85],
 ];
 
+
+
+
+
+
+fn bayer_1d(matrix_size: usize, num_samples: usize) -> Vec<usize> {
+    match matrix_size {
+        4 => interp_bayer(BAYER_4, num_samples),
+        8 => interp_bayer(BAYER_8, num_samples),
+        16 => interp_bayer(BAYER_16, num_samples),
+        _ => panic!("Invalid Bayer matrix size {matrix_size}."),
+    }
+}
+
 // returns a 2D array encoded in a 1D one.
 fn interp_bayer<const B: usize>(bayer_mat: [[u8; B]; B], knoll_n: usize)
 -> Vec<usize> {
@@ -428,7 +360,7 @@ mod test {
 
     #[test]
     fn test_kmeans_rect_full() {
-        let img = OkImage {
+        let img = PxImage {
             data: vec![
                 Oklab { l: 0.5, a: 0.0, b: 0.0 },
                 Oklab { l: 0.5, a: 0.0, b: 0.5 },
@@ -456,7 +388,7 @@ mod test {
         ];
         let k = 2usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
-        let initial = OkImage::kmeans_initial(&points, k, &mut rng);
+        let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
             Oklab { l: 0.5, a: 1.0, b: 0.5 },
             Oklab { l: 0.5, a: 0.0, b: 0.0 },
@@ -473,7 +405,7 @@ mod test {
         ];
         let k = 2usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
-        let initial = OkImage::kmeans_initial(&points, k, &mut rng);
+        let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
             Oklab { l: 0.5, a: 0.0, b: 0.5 },
         ], initial);
@@ -487,7 +419,7 @@ mod test {
         ];
         let k = 3usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
-        let initial = OkImage::kmeans_initial(&points, k, &mut rng);
+        let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
             Oklab { l: 0.5, a: 1.0, b: 0.5 },
             Oklab { l: 0.5, a: 0.0, b: 0.5 },
