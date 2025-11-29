@@ -5,6 +5,7 @@ use super::{Oklab, DitherOptions};
 use image::{ImageReader, Rgb, ImageBuffer};
 
 use std::ops::{Index, IndexMut};
+use std::collections::HashSet;
 
 use rand::{Rng, SeedableRng};
 use rand_xoshiro::{Xoshiro256StarStar};
@@ -83,20 +84,20 @@ impl PxImage {
     }
 
     // Overwrites candidates.
-    fn knoll_dither_inner(
+    pub fn knoll_dither_inner(
         candidates: &mut [Oklab],
         palette: &[Oklab],
         pixel: &Oklab,
         n: usize,
         strength: f32)
     {
-        let mut goal = *pixel;
+        let mut error = Oklab { l: 0.0, a: 0.0, b: 0.0 };
         for it in 0..n {
+            let attempt = *pixel + error * strength;
             let closest = palette.iter()
-                .min_by(|p,q| p.sq_dist(&goal).total_cmp(&q.sq_dist(&goal)))
+                .min_by(|p,q| p.sq_dist(&attempt).total_cmp(&q.sq_dist(&attempt)))
                 .unwrap();
-            let mut diff = *pixel - *closest; diff *= strength;
-            goal += diff;
+            error += *pixel - *closest;
             candidates[it] = *closest;
         }
 
@@ -109,23 +110,28 @@ impl PxImage {
     /// k must be positive. The palette will generally consist of
     /// exactly k colours unless the original image has fewer colours.
     /// Performs kmeans clustering with kmeans++ initialisation.
-    /// (todo: should I transpose from Oklab back into eg srgb555,
+    /// (todo: should I transpose from Oklab back into eg rgb888,
     /// then back again?)
     /// The palette will have at least one colour in it.
-    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<Oklab> {
+    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<([u8; 3], Oklab)> {
         let mut rng = Xoshiro256StarStar::seed_from_u64(random_seed);
 
         let mut centroids = Self::naive_k_means(&self.data, k, &mut rng);
-        // TODO: consider ensuring here that the palette colours
-        // are valid eg SRGB555 or RGB888 colours by mapping there,
-        // rounding and mapping back to Oklab. This will mean our
-        // palette is correct for the dithering computations.
-        // Probably doesn't make a difference but we should probably
-        // round somewhere.
-        centroids.sort_unstable();
-        // for c in centroids {
 
-        // }
+        // Discretize to RGB888. Ensure uniqueness (though in practice
+        // it should almost never cause centroids to be merged this way).
+        let centroids_rgb = centroids.into_iter()
+            .map(|c| c.to_srgb().to_srgb888())
+            .collect::<HashSet<_>>();
+
+        // Map back to Oklab colours and sort. (The Oklab ordering
+        // sort by luminance first, which is what we are mainly
+        // interested in.)
+        let mut centroids = centroids_rgb.into_iter()
+            .map(|c| (c, Oklab::from_srgb888(&c)))
+            .collect::<Vec<_>>();
+        centroids.sort_unstable_by_key(|(_,c)| *c);
+
         centroids
     }
 
@@ -352,6 +358,18 @@ fn interp_bayer<const B: usize>(bayer_mat: [[u8; B]; B], knoll_n: usize)
 }
 
 
+/// Optimal sorting network (in both comparisons and layers) for 8
+/// elements.
+fn sort_8<T: PartialOrd>(arr: &mut [T]) {
+    let mut cswap = |i,j| if arr[i] > arr[j] { arr.swap(i,j); };
+    cswap(0,2); cswap(1,3); cswap(4,6); cswap(5,7);
+    cswap(0,4); cswap(1,5); cswap(2,6); cswap(3,7);
+    cswap(0,1); cswap(2,3); cswap(4,5); cswap(6,7);
+    cswap(2,4); cswap(3,5);
+    cswap(1,4); cswap(3,6);
+    cswap(1,2); cswap(3,4); cswap(5,6);
+}
+
 
 
 #[cfg(test)]
@@ -424,5 +442,47 @@ mod test {
             Oklab { l: 0.5, a: 1.0, b: 0.5 },
             Oklab { l: 0.5, a: 0.0, b: 0.5 },
         ], initial);
+    }
+
+    #[test]
+    fn test_knoll_dither_inner() {
+        let n = 8;
+        let mut candidates = [Oklab::BLACK; 8];
+        let pixel = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+        let palette = [
+            Oklab { l: -1.0, a: 0.0, b: 0.0 },
+            Oklab { l: 2.0, a: 0.0, b: 0.0 },
+        ];
+        let strength = 0.5;
+
+        PxImage::knoll_dither_inner(&mut candidates, &palette, &pixel,
+            n, strength);
+
+        assert_eq!(vec![Oklab::BLACK], candidates);
+    }
+
+    #[test]
+    fn test_sort_8() {
+        for i1 in 0..8 {
+            for i2 in 0..8 {
+                for i3 in 0..8 {
+                    for i4 in 0..8 {
+                        for i5 in 0..8 {
+                            for i6 in 0..8 {
+                                for i7 in 0..8 {
+                                    for i8 in 0..8 {
+                                        let mut v = [i1,i2,i3,i4,i5,i6,i7,i8];
+                                        sort_8(&mut v);
+                                        for j in 0..7 {
+                                            assert!(!(v[j] > v[j+1]));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

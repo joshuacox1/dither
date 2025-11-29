@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign, DivAssign, MulAssign};
+use std::ops::{Add, AddAssign, Sub, SubAssign, DivAssign, Mul, MulAssign};
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -30,6 +30,10 @@ impl Oklab {
         }
     }
 
+    // pub fn to_srgb_888(&self) -> [u8; 3] {
+    //     self.to_srgb().to_srgb_888()
+    // }
+
     /// Squared distance between colours.
     pub fn sq_dist(&self, other: &Self) -> f32 {
         let l_d = other.l - self.l;
@@ -40,6 +44,12 @@ impl Oklab {
 
     pub const WHITE: Oklab = Oklab { l: 1.0, a: 0.0, b: 0.0 };
     pub const BLACK: Oklab = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+
+    /// Panics if `rgb` is not of length 3.
+    pub fn from_srgb888(rgb: &[u8]) -> Self {
+        assert!(rgb.len() == 3);
+        Srgb::from_srgb888(rgb).to_oklab()
+    }
 
     /// Panics if `rgb` is not of length 3.
     pub fn from_srgb_triple(rgb: &[f32]) -> Self {
@@ -91,6 +101,18 @@ impl SubAssign for Oklab {
         self.l -= other.l;
         self.a -= other.a;
         self.b -= other.b;
+    }
+}
+
+impl Mul<f32> for Oklab {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self {
+        Self {
+            l: self.l * rhs,
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
     }
 }
 
@@ -194,6 +216,13 @@ impl Srgb {
             discretise_8bit(self.g),
             discretise_8bit(self.b),
         ]
+    }
+
+    pub fn from_srgb888(rgb: &[u8]) -> Self {
+        let r = rgb[0] as f32 / 255.0;
+        let g = rgb[1] as f32 / 255.0;
+        let b = rgb[2] as f32 / 255.0;
+        Self { r, g, b }
     }
 
     pub fn to_srgb555(&self) -> u16 {

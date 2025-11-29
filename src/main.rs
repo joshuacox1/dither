@@ -4,12 +4,10 @@ use image::ImageReader;
 use dither::{Oklab, PxImage, DitherOptions, PaletteOptions, Problem};
 
 fn main() {
-
-
     // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
     let mut img = PxImage::from_path(
         //"C:\\Users\\Joshua\\OneDrive\\projects\\dither\\test4x4.png");
-         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\ylscene.png");
+         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\jug.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\account\\ken_amada_winter_small.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\the_music_lesson_hq.jpg");
@@ -20,39 +18,44 @@ fn main() {
     }
 
     println!("Computing palette");
-    let pal = img.palette(8, 0xdeadbeef);
+    let pal = img.palette(32, 0xdeadbeef);
 
-    let pal = [
-        Oklab { l: 0.24, a: 0.01, b: -0.04 },
-        Oklab { l: 0.72, a: -0.18, b: 0.12 },
-        Oklab { l: 0.68, a: 0.08, b: 0.13 },
-        Oklab { l: 0.56, a: 0.19, b: 0.08 },
-        Oklab { l: 0.53, a: 0.08, b: -0.12 },
-        Oklab { l: 0.64, a: -0.06, b: -0.13 },
-        Oklab { l: 0.99, a: 0.0, b: 0.01 },
-    ];
+    for (crgb, c) in pal {
+        let [r,g,b] = crgb;
+        println!("#{r:02x}{g:02x}{b:02x} | {c}");
+    }
 
-    let pal = [
-        Oklab { l: 0.084, a: 0.03, b: 0.02 },
-        Oklab { l: 0.22, a: 0.0, b: 0.03 },
-        Oklab { l: 0.31, a: 0.03, b: 0.04 },
-        Oklab { l: 0.32, a: 0.03, b: 0.05 },
+    // let pal = [
+    //     Oklab { l: 0.24, a: 0.01, b: -0.04 },
+    //     Oklab { l: 0.72, a: -0.18, b: 0.12 },
+    //     Oklab { l: 0.68, a: 0.08, b: 0.13 },
+    //     Oklab { l: 0.56, a: 0.19, b: 0.08 },
+    //     Oklab { l: 0.53, a: 0.08, b: -0.12 },
+    //     Oklab { l: 0.64, a: -0.06, b: -0.13 },
+    //     Oklab { l: 0.99, a: 0.0, b: 0.01 },
+    // ];
 
-        Oklab { l: 0.35, a: -0.06, b: 0.07 },
-        Oklab { l: 0.43, a: 0.0, b: 0.07 },
-        Oklab { l: 0.57, a: 0.03, b: 0.1 },
-        Oklab { l: 0.48, a: 0.15, b: 0.09 },
+    // let pal = [
+    //     Oklab { l: 0.084, a: 0.03, b: 0.02 },
+    //     Oklab { l: 0.22, a: 0.0, b: 0.03 },
+    //     Oklab { l: 0.31, a: 0.03, b: 0.04 },
+    //     Oklab { l: 0.32, a: 0.03, b: 0.05 },
 
-        Oklab { l: 0.36, a: 0.01, b: -0.12 },
-        Oklab { l: 0.49, a: -0.11, b: 0.1 },
-        Oklab { l: 0.82, a: -0.04, b: 0.15 },
-        Oklab { l: 0.77, a: 0.07, b: 0.08 },
+    //     Oklab { l: 0.35, a: -0.06, b: 0.07 },
+    //     Oklab { l: 0.43, a: 0.0, b: 0.07 },
+    //     Oklab { l: 0.57, a: 0.03, b: 0.1 },
+    //     Oklab { l: 0.48, a: 0.15, b: 0.09 },
 
-        Oklab { l: 0.64, a: -0.03, b: -0.05 },
-        Oklab { l: 0.83, a: 0.01, b: 0.03 },
-        Oklab { l: 0.92, a: -0.02, b: 0.14 },
-        Oklab { l: 0.98, a: -0.01, b: 0.03 },
-    ];
+    //     Oklab { l: 0.36, a: 0.01, b: -0.12 },
+    //     Oklab { l: 0.49, a: -0.11, b: 0.1 },
+    //     Oklab { l: 0.82, a: -0.04, b: 0.15 },
+    //     Oklab { l: 0.77, a: 0.07, b: 0.08 },
+
+    //     Oklab { l: 0.64, a: -0.03, b: -0.05 },
+    //     Oklab { l: 0.83, a: 0.01, b: 0.03 },
+    //     Oklab { l: 0.92, a: -0.02, b: 0.14 },
+    //     Oklab { l: 0.98, a: -0.01, b: 0.03 },
+    // ];
 
 
 
@@ -72,15 +75,15 @@ fn main() {
     // }
 
 
-    let dither_options = DitherOptions {
-        num_samples: 8,
-        matrix_size: 4,
-        strength: 1.0,
-    };
+    // let dither_options = DitherOptions {
+    //     num_samples: 8,
+    //     matrix_size: 4,
+    //     strength: 0.3,
+    // };
 
-    img.knoll_dither(&dither_options, &pal);
-    println!("Dithering done");
-    img.save_as_srgb_png("meep.png");
+    // img.knoll_dither(&dither_options, &pal);
+    // println!("Dithering done");
+    // img.save_as_srgb_png("meep2.png");
 }
 
 /* inputs:
