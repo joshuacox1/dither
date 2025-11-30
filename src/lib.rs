@@ -2,7 +2,7 @@ mod color;
 mod pximage;
 
 pub use color::Oklab;
-pub use pximage::PxImage;
+pub use pximage::{PxImage, write_indexed_png};
 
 #[derive(Debug, Clone)]
 pub enum PaletteOptions {

@@ -7,7 +7,7 @@ fn main() {
     // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
     let mut img = PxImage::from_path(
         //"C:\\Users\\Joshua\\OneDrive\\projects\\dither\\test4x4.png");
-         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\jug.png");
+         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\ylscene.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\account\\ken_amada_winter_small.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\the_music_lesson_hq.jpg");
@@ -18,12 +18,7 @@ fn main() {
     }
 
     println!("Computing palette");
-    let pal = img.palette(32, 0xdeadbeef);
-
-    for (crgb, c) in pal {
-        let [r,g,b] = crgb;
-        println!("#{r:02x}{g:02x}{b:02x} | {c}");
-    }
+    let pal = img.palette(16, 0xdeadbeef);
 
     // let pal = [
     //     Oklab { l: 0.24, a: 0.01, b: -0.04 },
@@ -56,8 +51,13 @@ fn main() {
     //     Oklab { l: 0.92, a: -0.02, b: 0.14 },
     //     Oklab { l: 0.98, a: -0.01, b: 0.03 },
     // ];
+    // let pal = pal.into_iter().map(|c| (c.to_srgb().to_srgb888(), c)).collect::<Vec<_>>();
 
 
+    for (crgb, c) in &pal {
+        let [r,g,b] = crgb;
+        println!("#{r:02x}{g:02x}{b:02x} | {c}");
+    }
 
 
     println!("Palette computed.");
@@ -75,14 +75,15 @@ fn main() {
     // }
 
 
-    // let dither_options = DitherOptions {
-    //     num_samples: 8,
-    //     matrix_size: 4,
-    //     strength: 0.3,
-    // };
+    let dither_options = DitherOptions {
+        num_samples: 8,
+        matrix_size: 4,
+        strength: 1.0,
+    };
 
-    // img.knoll_dither(&dither_options, &pal);
-    // println!("Dithering done");
+    let palette_indices = img.knoll_dither(&dither_options, &pal);
+    println!("Dithering done");
+    dither::write_indexed_png("result.png", img.dims(), &pal, &palette_indices);
     // img.save_as_srgb_png("meep2.png");
 }
 

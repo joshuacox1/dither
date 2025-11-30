@@ -13,7 +13,7 @@ use rand_xoshiro::{Xoshiro256StarStar};
 // /// A 2D array of stuffs.
 pub struct PxImage {
     data: Vec<Oklab>,
-    dims: (usize, usize),
+    dims: (u32, u32),
 }
 
 impl PxImage {
@@ -22,8 +22,8 @@ impl PxImage {
         let img = ImageReader::open(s)
             .unwrap().decode().unwrap()
             .into_rgb32f();
-        let w = img.width() as usize;
-        let h = img.height() as usize;
+        let w = img.width();
+        let h = img.height();
         let data = img.pixels()
             .map(|rgb| Oklab::from_srgb_triple(&rgb.0))
             .collect::<Vec<_>>();
@@ -35,7 +35,7 @@ impl PxImage {
         // TODO: also, indexed colour?!
         let (w,h) = self.dims;
         let img = ImageBuffer::from_fn(
-            w as u32, h as u32,
+            w, h,
             |i,j| {
                 let (i,j) = (i as usize, j as usize);
                 let px = self[(i,j)];
@@ -50,42 +50,51 @@ impl PxImage {
         img.save(s).unwrap();
     }
 
-    fn new(data: Vec<Oklab>, dims: (usize, usize)) -> Self {
-        assert!(data.len() == dims.0*dims.1);
+    fn new(data: Vec<Oklab>, dims: (u32, u32)) -> Self {
+        assert!(data.len() == dims.0 as usize * dims.1 as usize);
         assert!(data.len() > 0);
         Self { data, dims }
     }
 
     /// The dimensions of the image (width, height). Both will be
     /// at least `1`.
-    pub fn dims(&self) -> (usize, usize) { self.dims }
+    pub fn dims(&self) -> (u32, u32) { self.dims }
 
     /// Perform Knoll dithering on the image.
-    pub fn knoll_dither(&mut self,
+    /// For now: 8-bit indexed colour only. Consider other bits later.
+    pub fn knoll_dither(&self,
         options: &DitherOptions,
-        palette: &[Oklab],
-    ) {
-        let (w, h) = self.dims;
+        palette: &[([u8; 3], Oklab)],
+    ) -> Vec<u8> {
+        let w = self.dims.0 as usize; let h = self.dims.1 as usize;
         let n = options.num_samples as usize;
         let b = options.matrix_size as usize;
+        // todo: delete this
+        let palette = palette.iter().map(|(_,c)| *c).collect::<Vec<_>>();
 
-        let mut candidates = vec![Oklab::BLACK; n];
+        let mut result = Vec::with_capacity(w*h); // divide by 8/bit depth
+        // todo: maybeuninit
+        let mut candidates = vec![usize::MAX; n];
         let bayer_interped = bayer_1d(b, n);
         for j in 0..h {
             for i in 0..w {
                 let pixel = self[(i,j)];
-                Self::knoll_dither_inner(&mut candidates, palette, &pixel,
-                    n, options.strength);
+                Self::knoll_dither_inner(&mut candidates, &palette,
+                    &pixel, n, options.strength);
 
+                // todo: reconsider bayer interping.
                 let bayer_idx = bayer_interped[(j % b)*b + (i % b)];
-                self[(i,j)] = candidates[bayer_idx];
+                let palette_idx = candidates[bayer_idx];
+                result.push(palette_idx as u8);
             }
         }
+
+        result
     }
 
     // Overwrites candidates.
     pub fn knoll_dither_inner(
-        candidates: &mut [Oklab],
+        candidates: &mut [usize],
         palette: &[Oklab],
         pixel: &Oklab,
         n: usize,
@@ -94,16 +103,17 @@ impl PxImage {
         let mut error = Oklab { l: 0.0, a: 0.0, b: 0.0 };
         for it in 0..n {
             let attempt = *pixel + error * strength;
-            let closest = palette.iter()
-                .min_by(|p,q| p.sq_dist(&attempt).total_cmp(&q.sq_dist(&attempt)))
+            let (argclosest, closest) = palette.iter().enumerate()
+                .min_by(|(i,p),(j,q)| p.sq_dist(&attempt)
+                    .total_cmp(&q.sq_dist(&attempt)))
                 .unwrap();
             error += *pixel - *closest;
-            candidates[it] = *closest;
+            candidates[it] = argclosest;
         }
 
         // The default order on Oklab colours is increasing by luminance,
         // which is what we need here.
-        candidates.sort_unstable();
+        candidates.sort_unstable_by_key(|&i| palette[i]);
     }
 
     /// Obtain a representative palette from the image of at most k colours.
@@ -116,7 +126,7 @@ impl PxImage {
     pub fn palette(&self, k: usize, random_seed: u64) -> Vec<([u8; 3], Oklab)> {
         let mut rng = Xoshiro256StarStar::seed_from_u64(random_seed);
 
-        let mut centroids = Self::naive_k_means(&self.data, k, &mut rng);
+        let centroids = Self::naive_k_means(&self.data, k, &mut rng);
 
         // Discretize to RGB888. Ensure uniqueness (though in practice
         // it should almost never cause centroids to be merged this way).
@@ -152,6 +162,7 @@ impl PxImage {
         let mut cluster_counts = vec![0; k];
         let mut converged;
 
+        let mut counter = 0;
         loop {
             converged = true;
 
@@ -168,7 +179,7 @@ impl PxImage {
                 centroid_idxes[i_p] = min_centroid_idx;
                 cluster_counts[min_centroid_idx] += 1;
             }
-            //println!("kmeans step. part: {centroid_idxes:?}\ncounts:{cluster_counts:?}");
+            println!("kmeans step {counter}...");
 
             if converged {
                 break;
@@ -190,6 +201,7 @@ impl PxImage {
             }
 
             for c in cluster_counts.iter_mut() { *c = 0; }
+            counter += 1;
         }
 
         centroids
@@ -269,7 +281,8 @@ impl Index<(usize, usize)> for PxImage {
     type Output = Oklab;
 
     fn index(&self, ij: (usize, usize)) -> &Self::Output {
-        let (i, j) = ij; let (width, height) = self.dims;
+        let (i, j) = ij;
+        let width = self.dims.0 as usize; let height = self.dims.1 as usize;
         if i < width && j < height {
             &self.data[width*j + i]
         } else {
@@ -281,7 +294,8 @@ impl Index<(usize, usize)> for PxImage {
 
 impl IndexMut<(usize, usize)> for PxImage {
     fn index_mut(&mut self, ij: (usize, usize)) -> &mut Self::Output {
-        let (i, j) = ij; let (width, height) = self.dims;
+        let (i, j) = ij;
+        let width = self.dims.0 as usize; let height = self.dims.1 as usize;
         if i < width && j < height {
             &mut self.data[width*j + i]
         } else {
@@ -371,6 +385,118 @@ fn sort_8<T: PartialOrd>(arr: &mut [T]) {
 }
 
 
+use std::fs::File;
+use std::io::BufWriter;
+use png::{BitDepth, SrgbRenderingIntent, ColorType, DeflateCompression};
+
+pub fn write_indexed_png(
+    path: &str,
+    dims: (u32, u32),
+    palette: &[([u8; 3], Oklab)],
+    data: &[u8],
+) {
+    let file = File::create(path).unwrap();
+    let ref mut w = BufWriter::new(file);
+
+    let mut e = png::Encoder::new(w, dims.0, dims.1);
+    e.set_source_srgb(SrgbRenderingIntent::RelativeColorimetric);
+    e.set_color(ColorType::Indexed);
+    e.set_deflate_compression(DeflateCompression::Level(9));
+
+    let lp = palette.len();
+    assert!(1 <= lp && lp <= 256);
+    let bit_depth = if lp <= 2 {
+        BitDepth::One
+    } else if lp <= 4 {
+        BitDepth::Two
+    } else if lp <= 16 {
+        BitDepth::Four
+    } else {
+        BitDepth::Eight
+    };
+    e.set_depth(bit_depth);
+
+    // By the PNG spec, the palette chunk does not need to contain padding
+    // entries up to 256 or whatever. It is fine as long as all the pixels
+    // in the image have a valid palette index.
+    // The palette must be 8-bit RGB.
+    let mut palette_bytes = Vec::<u8>::with_capacity(3*lp);
+    for p in palette {
+        palette_bytes.push(p.0[0]);
+        palette_bytes.push(p.0[1]);
+        palette_bytes.push(p.0[2]);
+    }
+    e.set_palette(palette_bytes);
+    let mut writer = e.write_header().unwrap();
+
+    let d = data.len();
+    let w = dims.0 as usize; let h = dims.1 as usize;
+
+    // Per the PNG spec, for < 8-bit depth images, rows always start
+    // at a byte boundary (so there is padding of unspecified value
+    // if the width is not a clean multiple). Within a byte, pixels are
+    // laid out where left to right = highest bits to lowest bits.
+    match bit_depth {
+        BitDepth::One => {
+            let w_bytes = w.div_ceil(8);
+            let data_size = 8*w_bytes * h;
+            let mut z = Vec::with_capacity(data_size);
+            for j in 0..h {
+                for i in 0..w_bytes {
+                    let idx = j*w + 8*i;
+                    let mut b = data[idx] << 7;
+                    if let Some(p) = data.get(idx+1) { b |= p << 6; }
+                    if let Some(p) = data.get(idx+2) { b |= p << 5; }
+                    if let Some(p) = data.get(idx+3) { b |= p << 4; }
+                    if let Some(p) = data.get(idx+4) { b |= p << 3; }
+                    if let Some(p) = data.get(idx+5) { b |= p << 2; }
+                    if let Some(p) = data.get(idx+6) { b |= p << 1; }
+                    if let Some(p) = data.get(idx+7) { b |= p; }
+                    z.push(b);
+                }
+            }
+            writer.write_image_data(&z).unwrap();
+        },
+        BitDepth::Two => {
+            let w_bytes = w.div_ceil(4);
+            let data_size = 4*w_bytes * h;
+            let mut z = Vec::with_capacity(data_size);
+            for j in 0..h {
+                for i in 0..w_bytes {
+                    let idx = j*w + 4*i;
+                    let mut b = data[idx] << 6;
+                    if let Some(p) = data.get(idx+1) { b |= p << 4; }
+                    if let Some(p) = data.get(idx+2) { b |= p << 2; }
+                    if let Some(p) = data.get(idx+3) { b |= p; }
+                    z.push(b);
+                }
+            }
+            writer.write_image_data(&z).unwrap();
+        },
+        BitDepth::Four => {
+            let w_bytes = w.div_ceil(2);
+            let data_size = 2*w_bytes * h;
+            let mut z = Vec::with_capacity(data_size);
+            for j in 0..h {
+                for i in 0..w_bytes {
+                    let idx = j*w + 2*i;
+                    let mut b = data[idx] << 4;
+                    if let Some(p) = data.get(idx+1) { b |= p; }
+                    z.push(b);
+                }
+            }
+            writer.write_image_data(&z).unwrap();
+        },
+        BitDepth::Eight => {
+            writer.write_image_data(data).unwrap();
+        },
+        BitDepth::Sixteen => unsafe { std::hint::unreachable_unchecked() },
+    }
+
+    // TODO: some of these unwraps should not be unwraps.
+    // only the write_header().unwrap is legitimate as that should
+    // never fail as I've inputted valid values
+}
 
 #[cfg(test)]
 mod test {

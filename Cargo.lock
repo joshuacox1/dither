@@ -236,6 +236,7 @@ name = "dither"
 version = "0.1.0"
 dependencies = [
  "image",
+ "png",
  "rand",
  "rand_xoshiro",
 ]
