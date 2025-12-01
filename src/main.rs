@@ -18,7 +18,7 @@ fn main() {
     }
 
     println!("Computing palette");
-    let pal = img.palette(16, 0xdeadbeef);
+    let pal = img.palette(32, 0xbeefdead);
 
     // let pal = [
     //     Oklab { l: 0.24, a: 0.01, b: -0.04 },
@@ -78,7 +78,7 @@ fn main() {
     let dither_options = DitherOptions {
         num_samples: 8,
         matrix_size: 4,
-        strength: 1.0,
+        strength: 0.3,
     };
 
     let palette_indices = img.knoll_dither(&dither_options, &pal);
