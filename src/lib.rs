@@ -1,7 +1,7 @@
 mod color;
 mod pximage;
 
-pub use color::Oklab;
+pub use color::{Oklab, Rgb888};
 pub use pximage::{PxImage, write_indexed_png};
 
 #[derive(Debug, Clone)]

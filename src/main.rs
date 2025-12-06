@@ -7,7 +7,7 @@ fn main() {
     // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
     let mut img = PxImage::from_path(
         //"C:\\Users\\Joshua\\OneDrive\\projects\\dither\\test4x4.png");
-         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\ylscene.png");
+         "C:\\Users\\Joshua\\OneDrive\\projects\\dither\\david.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\account\\ken_amada_winter_small.png");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg");
         //"C:\\Users\\Joshua\\OneDrive\\pictures\\the_music_lesson_hq.jpg");
@@ -17,8 +17,18 @@ fn main() {
         (x * 255.0).clamp(0.0, 255.0).round() as u8
     }
 
+
+    let blue = Oklab::from_srgb_888_str("#0000ff").unwrap();
+    let cyan = Oklab::from_srgb_888_str("#00ffff").unwrap();
+    println!("{blue:?}, {cyan:?}");
+    let halfway = (blue + cyan) / 2.0;
+    println!("halfway: {halfway:?}, {:?}", halfway.to_srgb());
+    // return;
+
+
     println!("Computing palette");
-    let pal = img.palette(32, 0xbeefdead);
+    // let pal = img.palette(2, 0xbeefdead);
+    let pal = [Oklab::WHITE, Oklab::BLACK];
 
     // let pal = [
     //     Oklab { l: 0.24, a: 0.01, b: -0.04 },
@@ -51,7 +61,7 @@ fn main() {
     //     Oklab { l: 0.92, a: -0.02, b: 0.14 },
     //     Oklab { l: 0.98, a: -0.01, b: 0.03 },
     // ];
-    // let pal = pal.into_iter().map(|c| (c.to_srgb().to_srgb888(), c)).collect::<Vec<_>>();
+    let pal = pal.into_iter().map(|c| (c.to_srgb().to_srgb888(), c)).collect::<Vec<_>>();
 
 
     for (crgb, c) in &pal {

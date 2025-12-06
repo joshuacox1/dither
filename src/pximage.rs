@@ -131,7 +131,11 @@ impl PxImage {
         // Discretize to RGB888. Ensure uniqueness (though in practice
         // it should almost never cause centroids to be merged this way).
         let centroids_rgb = centroids.into_iter()
-            .map(|c| c.to_srgb().to_srgb888())
+            .map(|c| {
+                let q = c.to_srgb();
+                println!("{q:?}");
+                q.to_srgb888()
+            })
             .collect::<HashSet<_>>();
 
         // Map back to Oklab colours and sort. (The Oklab ordering

@@ -1,19 +1,30 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign, DivAssign, Mul, MulAssign};
+use std::ops::{Add, AddAssign, Sub, SubAssign, Div, DivAssign, Mul, MulAssign};
 use std::cmp::Ordering;
 use std::fmt;
 
 /// A colour in the Oklab colour space.
+/// PROBABLY going to use the revised lightness estimate.
 #[derive(Debug, Copy, Clone)]
-pub struct Oklab { pub l: f32, pub a: f32, pub b: f32 }
+pub struct Oklab {
+    pub l: f32,
+    pub a: f32,
+    pub b: f32,
+}
 
 // TODO: for good style, make add etc. traits take references.
+
+const K1: f32 = 0.206;
+const K2: f32 = 0.03;
+const K3: f32 = (1.0 + K1) / (1.0 + K2);
 
 impl Oklab {
     /// Convert to gamma-encoded RGB in the sRGB colour space.
     pub fn to_srgb(&self) -> Srgb {
-        let l_ = self.l + 0.3963377774f32*self.a + 0.2158037573f32*self.b;
-        let m_ = self.l - 0.1055613458f32*self.a - 0.0638541728f32*self.b;
-        let s_ = self.l - 0.0894841775f32*self.a - 1.2914855480f32*self.b;
+        let old_l = Self::new_to_old_lightness(self.l);
+
+        let l_ = old_l + 0.3963377774f32*self.a + 0.2158037573f32*self.b;
+        let m_ = old_l - 0.1055613458f32*self.a - 0.0638541728f32*self.b;
+        let s_ = old_l - 0.0894841775f32*self.a - 1.2914855480f32*self.b;
 
         let l = l_*l_*l_;
         let m = m_*m_*m_;
@@ -30,11 +41,20 @@ impl Oklab {
         }
     }
 
-    // pub fn to_srgb_888(&self) -> [u8; 3] {
-    //     self.to_srgb().to_srgb_888()
-    // }
+    fn old_to_new_lightness(l: f32) -> f32 {
+        return l;
+        let x = K3*l - K1;
+        0.5*(x + (x*x + 4.0*K2*K3*l).sqrt())
+    }
 
-    /// Squared distance between colours.
+    fn new_to_old_lightness(l_r: f32) -> f32 {
+        return l_r;
+        let top = l_r * (l_r + K1);
+        let bottom = K3 * (l_r + K2);
+        top / bottom
+    }
+
+    /// Squared distance between this Oklab colour and another.
     pub fn sq_dist(&self, other: &Self) -> f32 {
         let l_d = other.l - self.l;
         let a_d = other.a - self.a;
@@ -62,7 +82,25 @@ impl Oklab {
         Srgb::from_srgb_888_str(hash_rrggbb)
             .map(|c| Srgb::to_oklab(&c))
     }
+
+    /// Returns either white or black: whichever has the greater
+    /// contrast with the given colour.
+    pub fn white_or_black_most_contrast(&self) -> &'static Oklab {
+        // Contrast is defined by the W3C as (L1 + 0.05) / (L2 + 0.05),
+        // where L1 is the lightness of the lighter of the two colours
+        // and L2 of the darker colour. Since white is lighter than
+        // every colour and black darker than every colour, we want
+        // to compare A = 0.05 / (l + 0.05) and B = (l + 0.05) / 1.05.
+        // We have A <= B when 1.05/0.05 <= (l + 0.05)^2. Simplifying
+        // we obtain the cut-off point of sqrt(0.0525)-0.05 = 0.17912...
+        // Below this number the contrast with white is higher;
+        // Above it, the contrast with black is higher.
+        let cutoff = 0.0525f32.sqrt() - 0.05f32;
+        if self.l < cutoff { &Self::WHITE } else { &Self::BLACK }
+    }
 }
+
+// TODO: take ownership of both
 
 impl Add for Oklab {
     type Output = Self;
@@ -124,6 +162,54 @@ impl MulAssign<f32> for Oklab {
     }
 }
 
+impl Div<f32> for Oklab {
+    type Output = Self;
+
+    fn div(self, rhs: f32) -> Self {
+        Self {
+            l: self.l / rhs,
+            a: self.a / rhs,
+            b: self.b / rhs,
+        }
+    }
+}
+
+impl Div<f32> for &Oklab {
+    type Output = Oklab;
+
+    fn div(self, rhs: f32) -> Oklab {
+        Oklab {
+            l: self.l / rhs,
+            a: self.a / rhs,
+            b: self.b / rhs,
+        }
+    }
+}
+
+impl Div<&f32> for Oklab {
+    type Output = Self;
+
+    fn div(self, rhs: &f32) -> Self {
+        Self {
+            l: self.l / *rhs,
+            a: self.a / *rhs,
+            b: self.b / *rhs,
+        }
+    }
+}
+
+impl Div<&f32> for &Oklab {
+    type Output = Oklab;
+
+    fn div(self, rhs: &f32) -> Oklab {
+        Oklab {
+            l: self.l / *rhs,
+            a: self.a / *rhs,
+            b: self.b / *rhs,
+        }
+    }
+}
+
 impl DivAssign<f32> for Oklab {
     fn div_assign(&mut self, rhs: f32) {
         self.l /= rhs;
@@ -162,7 +248,224 @@ impl fmt::Display for Oklab {
     }
 }
 
+
+// ///
+// fn srgb_gamut_mapping() {
+
+// }
+
+
+
+
+
+
+// // Finds the maximum saturation possible for a given hue that fits in sRGB
+// // Saturation here is defined as S = C/L
+// // a and b must be normalized so a^2 + b^2 == 1
+// fn compute_max_saturation(a: f32, b: f32)
+// {
+//     // Max saturation will be when one of r, g or b goes below zero.
+
+//     // Select different coefficients depending on which component goes below zero first
+//     let k0, k1, k2, k3, k4, wl, wm, ws;
+
+//     if (-1.88170328 * a - 0.80936493 * b > 1)
+//     {
+//         // Red component
+//         k0 = 1.19086277; k1 = 1.76576728; k2 = 0.59662641;
+//         k3 = 0.75515197; k4 = 0.56771245;
+//         wl = 4.0767416621; wm = -3.3077115913; ws = 0.2309699292;
+//     }
+//     else if (1.81444104 * a - 1.19445276 * b > 1)
+//     {
+//         // Green component
+//         k0 = 0.73956515; k1 = -0.45954404; k2 = 0.08285427;
+//         k3 = 0.12541070; k4 = 0.14503204;
+//         wl = -1.2684380046; wm = 2.6097574011; ws = -0.3413193965;
+//     }
+//     else
+//     {
+//         // Blue component
+//         k0 = 1.35733652; k1 = -0.00915799; k2 = -1.15130210;
+//         k3 = -0.50559606; k4 = 0.00692167;
+//         wl = -0.0041960863; wm = -0.7034186147; ws = 1.7076147010;
+//     }
+
+//     // Approximate max saturation using a polynomial:
+//     let S = k0 + k1 * a + k2 * b + k3 * a * a + k4 * a * b;
+
+//     // Do one step Halley's method to get closer
+//     // this gives an error less than 10e6, except for some blue hues where the dS/dh is close to infinite
+//     // this should be sufficient for most applications, otherwise do two/three steps
+
+//     let k_l = 0.3963377774 * a + 0.2158037573 * b;
+//     let k_m = -0.1055613458 * a - 0.0638541728 * b;
+//     let k_s = -0.0894841775 * a - 1.2914855480 * b;
+
+//     {
+//         let l_ = 1.0 + S * k_l;
+//         let m_ = 1.0 + S * k_m;
+//         let s_ = 1.0 + S * k_s;
+
+//         let l = l_ * l_ * l_;
+//         let m = m_ * m_ * m_;
+//         let s = s_ * s_ * s_;
+
+//         let l_dS = 3.0 * k_l * l_ * l_;
+//         let m_dS = 3.0 * k_m * m_ * m_;
+//         let s_dS = 3.0 * k_s * s_ * s_;
+
+//         let l_dS2 = 6.0 * k_l * k_l * l_;
+//         let m_dS2 = 6.0 * k_m * k_m * m_;
+//         let s_dS2 = 6.0 * k_s * k_s * s_;
+
+//         let f  = wl * l     + wm * m     + ws * s;
+//         let f1 = wl * l_dS  + wm * m_dS  + ws * s_dS;
+//         let f2 = wl * l_dS2 + wm * m_dS2 + ws * s_dS2;
+
+//         S = S - f * f1 / (f1*f1 - 0.5 * f * f2);
+//     }
+
+//     return S;
+// }
+
+// // finds L_cusp and C_cusp for a given hue
+// // a and b must be normalized so a^2 + b^2 == 1
+// struct LC { float L; float C; };
+// fn find_cusp(a: f32, b: f32) -> (f32, f32) {
+//     // First, find the maximum saturation (saturation S = C/L)
+//     let S_cusp = compute_max_saturation(a, b);
+
+//     // Convert to linear sRGB to find the first point where at least one of r,g or b >= 1:
+//     RGB rgb_at_max = oklab_to_linear_srgb(Oklab { 1.0, S_cusp * a, S_cusp * b });
+//     float L_cusp = cbrtf(1.0 / max(max(rgb_at_max.r, rgb_at_max.g), rgb_at_max.b));
+//     float C_cusp = L_cusp * S_cusp;
+
+//     return { L_cusp , C_cusp };
+// }
+
+// // Finds intersection of the line defined by
+// // L = L0 * (1 - t) + t * L1;
+// // C = t * C1;
+// // a and b must be normalized so a^2 + b^2 == 1
+// float find_gamut_intersection(float a, float b, float L1, float C1, float L0)
+// {
+//     // Find the cusp of the gamut triangle
+//     LC cusp = find_cusp(a, b);
+
+//     // Find the intersection for upper and lower half seprately
+//     float t;
+//     if (((L1 - L0) * cusp.C - (cusp.L - L0) * C1) <= 0.f)
+//     {
+//         // Lower half
+
+//         t = cusp.C * L0 / (C1 * cusp.L + cusp.C * (L0 - L1));
+//     }
+//     else
+//     {
+//         // Upper half
+
+//         // First intersect with triangle
+//         t = cusp.C * (L0 - 1.f) / (C1 * (cusp.L - 1.f) + cusp.C * (L0 - L1));
+
+//         // Then one step Halley's method
+//         {
+//             float dL = L1 - L0;
+//             float dC = C1;
+
+//             float k_l = +0.3963377774f * a + 0.2158037573f * b;
+//             float k_m = -0.1055613458f * a - 0.0638541728f * b;
+//             float k_s = -0.0894841775f * a - 1.2914855480f * b;
+
+//             float l_dt = dL + dC * k_l;
+//             float m_dt = dL + dC * k_m;
+//             float s_dt = dL + dC * k_s;
+
+
+//             // If higher accuracy is required, 2 or 3 iterations of the following block can be used:
+//             {
+//                 float L = L0 * (1.f - t) + t * L1;
+//                 float C = t * C1;
+
+//                 float l_ = L + C * k_l;
+//                 float m_ = L + C * k_m;
+//                 float s_ = L + C * k_s;
+
+//                 float l = l_ * l_ * l_;
+//                 float m = m_ * m_ * m_;
+//                 float s = s_ * s_ * s_;
+
+//                 float ldt = 3 * l_dt * l_ * l_;
+//                 float mdt = 3 * m_dt * m_ * m_;
+//                 float sdt = 3 * s_dt * s_ * s_;
+
+//                 float ldt2 = 6 * l_dt * l_dt * l_;
+//                 float mdt2 = 6 * m_dt * m_dt * m_;
+//                 float sdt2 = 6 * s_dt * s_dt * s_;
+
+//                 float r = 4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s - 1;
+//                 float r1 = 4.0767416621f * ldt - 3.3077115913f * mdt + 0.2309699292f * sdt;
+//                 float r2 = 4.0767416621f * ldt2 - 3.3077115913f * mdt2 + 0.2309699292f * sdt2;
+
+//                 float u_r = r1 / (r1 * r1 - 0.5f * r * r2);
+//                 float t_r = -r * u_r;
+
+//                 float g = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s - 1;
+//                 float g1 = -1.2684380046f * ldt + 2.6097574011f * mdt - 0.3413193965f * sdt;
+//                 float g2 = -1.2684380046f * ldt2 + 2.6097574011f * mdt2 - 0.3413193965f * sdt2;
+
+//                 float u_g = g1 / (g1 * g1 - 0.5f * g * g2);
+//                 float t_g = -g * u_g;
+
+//                 float b = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s - 1;
+//                 float b1 = -0.0041960863f * ldt - 0.7034186147f * mdt + 1.7076147010f * sdt;
+//                 float b2 = -0.0041960863f * ldt2 - 0.7034186147f * mdt2 + 1.7076147010f * sdt2;
+
+//                 float u_b = b1 / (b1 * b1 - 0.5f * b * b2);
+//                 float t_b = -b * u_b;
+
+//                 t_r = u_r >= 0.f ? t_r : FLT_MAX;
+//                 t_g = u_g >= 0.f ? t_g : FLT_MAX;
+//                 t_b = u_b >= 0.f ? t_b : FLT_MAX;
+
+//                 t += min(t_r, min(t_g, t_b));
+//             }
+//         }
+//     }
+
+//     return t;
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /// Gamma-encoded sRGB.
+/// TODO: make this linear. Apply gamma later?
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Srgb { pub r: f32, pub g: f32, pub b: f32 }
 
@@ -199,11 +502,14 @@ impl Srgb {
         let m_ = m.cbrt();
         let s_ = s.cbrt();
 
-        return Oklab {
+        let mut result = Oklab {
             l: 0.2104542553f32*l_ + 0.7936177850f32*m_ - 0.0040720468f32*s_,
             a: 1.9779984951f32*l_ - 2.4285922050f32*m_ + 0.4505937099f32*s_,
             b: 0.0259040371f32*l_ + 0.7827717662f32*m_ - 0.8086757660f32*s_,
         };
+
+        result.l = Oklab::old_to_new_lightness(result.l);
+        result
     }
 
     pub fn to_srgb888(&self) -> [u8; 3] {
@@ -270,21 +576,35 @@ impl Srgb {
     }
 }
 
-// TODO: delete?
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-// pub struct Srgb555(pub u16);
+/// 24-bit RGB true colour. Intended to be interpreted in the sRGB
+/// colour space.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Rgb888 {
+    /// The red component.
+    pub r: u8,
+    /// The green component.
+    pub g: u8,
+    /// The blue component.
+    pub b: u8,
+}
 
-// impl Srgb555 {
-//     pub fn to_srgb(self) -> Srgb {
-//         let r_ = (self.0 & 0b0_11111_00000_00000) >> 10;
-//         let g_ = (self.0 & 0b0_00000_11111_00000) >> 5;
-//         let b_ = self.0 & 0b0_00000_00000_11111;
-//         let r = r_ as f32 / 31.0;
-//         let g = g_ as f32 / 31.0;
-//         let b = b_ as f32 / 31.0;
-//         Srgb { r, g, b }
-//     }
-// }
+impl Rgb888 {
+    /// Maps an `Rgb888` interpreted in the sRGB colour space to its
+    /// corresponding Oklab colour.
+    pub fn to_oklab(&self) -> Oklab {
+        todo!()
+    }
+
+    /// Converts an `Rgb888` into an #RRGGBB hex string.
+    pub fn to_str(&self) -> String {
+        todo!()
+    }
+
+    /// Attempts to parse an #RRGGBB hex string into an `Rgb888`.
+    pub fn from_str(hash_rrggbb: &str) -> Result<Self, ()> {
+        todo!()
+    }
+}
 
 
 #[cfg(test)]
