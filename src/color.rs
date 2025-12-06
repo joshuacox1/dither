@@ -1,11 +1,13 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign, Div, DivAssign, Mul, MulAssign};
 use std::cmp::Ordering;
 use std::fmt;
+use std::borrow::Cow;
 
-/// A colour in the Oklab colour space.
-/// PROBABLY going to use the revised lightness estimate.
+/// A colour in the Oklab colour space. Uses the revised lightness
+/// estimate L_r described in <https://bottosson.github.io/posts/colorpicker/#intermission---a-new-lightness-estimate-for-oklab>,
+/// which significantly improves lightness prediction.
 #[derive(Debug, Copy, Clone)]
-pub struct Oklab {
+pub struct Oklabr {
     pub l: f32,
     pub a: f32,
     pub b: f32,
@@ -17,7 +19,7 @@ const K1: f32 = 0.206;
 const K2: f32 = 0.03;
 const K3: f32 = (1.0 + K1) / (1.0 + K2);
 
-impl Oklab {
+impl Oklabr {
     /// Convert to gamma-encoded RGB in the sRGB colour space.
     pub fn to_srgb(&self) -> Srgb {
         let old_l = Self::new_to_old_lightness(self.l);
@@ -42,19 +44,17 @@ impl Oklab {
     }
 
     fn old_to_new_lightness(l: f32) -> f32 {
-        return l;
         let x = K3*l - K1;
         0.5*(x + (x*x + 4.0*K2*K3*l).sqrt())
     }
 
     fn new_to_old_lightness(l_r: f32) -> f32 {
-        return l_r;
         let top = l_r * (l_r + K1);
         let bottom = K3 * (l_r + K2);
         top / bottom
     }
 
-    /// Squared distance between this Oklab colour and another.
+    /// Squared distance between this Oklabr colour and another.
     pub fn sq_dist(&self, other: &Self) -> f32 {
         let l_d = other.l - self.l;
         let a_d = other.a - self.a;
@@ -62,8 +62,8 @@ impl Oklab {
         l_d*l_d + a_d*a_d + b_d*b_d
     }
 
-    pub const WHITE: Oklab = Oklab { l: 1.0, a: 0.0, b: 0.0 };
-    pub const BLACK: Oklab = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+    pub const WHITE: Oklabr = Oklabr { l: 1.0, a: 0.0, b: 0.0 };
+    pub const BLACK: Oklabr = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
 
     /// Panics if `rgb` is not of length 3.
     pub fn from_srgb888(rgb: &[u8]) -> Self {
@@ -85,7 +85,7 @@ impl Oklab {
 
     /// Returns either white or black: whichever has the greater
     /// contrast with the given colour.
-    pub fn white_or_black_most_contrast(&self) -> &'static Oklab {
+    pub fn white_or_black_most_contrast(&self) -> &'static Oklabr {
         // Contrast is defined by the W3C as (L1 + 0.05) / (L2 + 0.05),
         // where L1 is the lightness of the lighter of the two colours
         // and L2 of the darker colour. Since white is lighter than
@@ -98,11 +98,27 @@ impl Oklab {
         let cutoff = 0.0525f32.sqrt() - 0.05f32;
         if self.l < cutoff { &Self::WHITE } else { &Self::BLACK }
     }
+
+    /// If the colour is within the sRGB gamut, returns a reference
+    /// to it. Otherwise computes a suitably close colour within the
+    /// sRGB gamut and returns that (owned). TODO: link the gamut
+    /// mapping article. This is a highly complex operation.
+    pub fn srgb_gamut_map(&self) -> Cow<'_, Self> {
+        todo!()
+    }
+
+    /// Returns whether an `Oklabr` colour is _valid_. This is true
+    /// when all three components are finite. If `bound_l`, lightness
+    /// must also lie in `[0.0, 1.0]`.
+    pub fn is_valid(&self, bound_l: bool) -> bool {
+        self.l.is_finite() && self.a.is_finite() && self.is_finite()
+            && (!bound_l || (0.0 <= self.l && self.l <= 1.0))
+    }
 }
 
 // TODO: take ownership of both
 
-impl Add for Oklab {
+impl Add for Oklabr {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -114,7 +130,7 @@ impl Add for Oklab {
     }
 }
 
-impl AddAssign for Oklab {
+impl AddAssign for Oklabr {
     fn add_assign(&mut self, other: Self) {
         self.l += other.l;
         self.a += other.a;
@@ -122,7 +138,7 @@ impl AddAssign for Oklab {
     }
 }
 
-impl Sub for Oklab {
+impl Sub for Oklabr {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -134,7 +150,7 @@ impl Sub for Oklab {
     }
 }
 
-impl SubAssign for Oklab {
+impl SubAssign for Oklabr {
     fn sub_assign(&mut self, other: Self) {
         self.l -= other.l;
         self.a -= other.a;
@@ -142,7 +158,7 @@ impl SubAssign for Oklab {
     }
 }
 
-impl Mul<f32> for Oklab {
+impl Mul<f32> for Oklabr {
     type Output = Self;
 
     fn mul(self, rhs: f32) -> Self {
@@ -154,7 +170,7 @@ impl Mul<f32> for Oklab {
     }
 }
 
-impl MulAssign<f32> for Oklab {
+impl MulAssign<f32> for Oklabr {
     fn mul_assign(&mut self, rhs: f32) {
         self.l *= rhs;
         self.a *= rhs;
@@ -162,7 +178,7 @@ impl MulAssign<f32> for Oklab {
     }
 }
 
-impl Div<f32> for Oklab {
+impl Div<f32> for Oklabr {
     type Output = Self;
 
     fn div(self, rhs: f32) -> Self {
@@ -174,11 +190,11 @@ impl Div<f32> for Oklab {
     }
 }
 
-impl Div<f32> for &Oklab {
-    type Output = Oklab;
+impl Div<f32> for &Oklabr {
+    type Output = Oklabr;
 
-    fn div(self, rhs: f32) -> Oklab {
-        Oklab {
+    fn div(self, rhs: f32) -> Oklabr {
+        Oklabr {
             l: self.l / rhs,
             a: self.a / rhs,
             b: self.b / rhs,
@@ -186,7 +202,7 @@ impl Div<f32> for &Oklab {
     }
 }
 
-impl Div<&f32> for Oklab {
+impl Div<&f32> for Oklabr {
     type Output = Self;
 
     fn div(self, rhs: &f32) -> Self {
@@ -198,11 +214,11 @@ impl Div<&f32> for Oklab {
     }
 }
 
-impl Div<&f32> for &Oklab {
-    type Output = Oklab;
+impl Div<&f32> for &Oklabr {
+    type Output = Oklabr;
 
-    fn div(self, rhs: &f32) -> Oklab {
-        Oklab {
+    fn div(self, rhs: &f32) -> Oklabr {
+        Oklabr {
             l: self.l / *rhs,
             a: self.a / *rhs,
             b: self.b / *rhs,
@@ -210,7 +226,7 @@ impl Div<&f32> for &Oklab {
     }
 }
 
-impl DivAssign<f32> for Oklab {
+impl DivAssign<f32> for Oklabr {
     fn div_assign(&mut self, rhs: f32) {
         self.l /= rhs;
         self.a /= rhs;
@@ -218,7 +234,7 @@ impl DivAssign<f32> for Oklab {
     }
 }
 
-impl Ord for Oklab {
+impl Ord for Oklabr {
     fn cmp(&self, other: &Self) -> Ordering {
         self.l.total_cmp(&other.l)
             .then(self.a.total_cmp(&other.a))
@@ -226,13 +242,13 @@ impl Ord for Oklab {
     }
 }
 
-impl PartialOrd for Oklab {
+impl PartialOrd for Oklabr {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Oklab {
+impl PartialEq for Oklabr {
     fn eq(&self, other: &Self) -> bool {
         matches!(self.l.total_cmp(&other.l), Ordering::Equal)
             && matches!(self.a.total_cmp(&other.a), Ordering::Equal)
@@ -240,9 +256,9 @@ impl PartialEq for Oklab {
     }
 }
 
-impl Eq for Oklab {}
+impl Eq for Oklabr {}
 
-impl fmt::Display for Oklab {
+impl fmt::Display for Oklabr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.2}%,{:.4},{:.4})", self.l*100.0, self.a, self.b)
     }
@@ -337,7 +353,7 @@ impl fmt::Display for Oklab {
 //     let S_cusp = compute_max_saturation(a, b);
 
 //     // Convert to linear sRGB to find the first point where at least one of r,g or b >= 1:
-//     RGB rgb_at_max = oklab_to_linear_srgb(Oklab { 1.0, S_cusp * a, S_cusp * b });
+//     RGB rgb_at_max = oklab_to_linear_srgb(Oklabr { 1.0, S_cusp * a, S_cusp * b });
 //     float L_cusp = cbrtf(1.0 / max(max(rgb_at_max.r, rgb_at_max.g), rgb_at_max.b));
 //     float C_cusp = L_cusp * S_cusp;
 
@@ -487,7 +503,7 @@ impl Srgb {
     }
 
     // https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
-    fn to_oklab(&self) -> Oklab {
+    fn to_oklab(&self) -> Oklabr {
         // linearise
         let r = Self::linearise(self.r);
         let g = Self::linearise(self.g);
@@ -502,13 +518,13 @@ impl Srgb {
         let m_ = m.cbrt();
         let s_ = s.cbrt();
 
-        let mut result = Oklab {
+        let mut result = Oklabr {
             l: 0.2104542553f32*l_ + 0.7936177850f32*m_ - 0.0040720468f32*s_,
             a: 1.9779984951f32*l_ - 2.4285922050f32*m_ + 0.4505937099f32*s_,
             b: 0.0259040371f32*l_ + 0.7827717662f32*m_ - 0.8086757660f32*s_,
         };
 
-        result.l = Oklab::old_to_new_lightness(result.l);
+        result.l = Oklabr::old_to_new_lightness(result.l);
         result
     }
 
@@ -590,8 +606,8 @@ pub struct Rgb888 {
 
 impl Rgb888 {
     /// Maps an `Rgb888` interpreted in the sRGB colour space to its
-    /// corresponding Oklab colour.
-    pub fn to_oklab(&self) -> Oklab {
+    /// corresponding Oklabr colour.
+    pub fn to_oklab(&self) -> Oklabr {
         todo!()
     }
 
@@ -613,9 +629,9 @@ mod test {
 
     #[test]
     fn oklab_impls() {
-        let c1 = Oklab { l: 1.0, a: 0.5, b: 0.75 };
-        let c2 = Oklab { l: 1.0, a: 0.5, b: 0.75 };
-        let c3 = Oklab { l: 1.0, a: 0.6, b: 0.75 };
+        let c1 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
+        let c2 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
+        let c3 = Oklabr { l: 1.0, a: 0.6, b: 0.75 };
         assert!(c1 == c2);
         assert!(c2 <= c3);
         assert!(c2 < c3);
@@ -625,9 +641,9 @@ mod test {
     #[test]
     fn oklab_makesure() {
         let c1 = "#ab6519"; let c2 = "#AB6519";
-        let ok1 = Oklab::from_srgb_888_str(c1).unwrap();
-        let ok2 = Oklab::from_srgb_888_str(c2).unwrap();
-        let expected = Oklab { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
+        let ok1 = Oklabr::from_srgb_888_str(c1).unwrap();
+        let ok2 = Oklabr::from_srgb_888_str(c2).unwrap();
+        let expected = Oklabr { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
 
         assert_eq!(expected, ok1);
         assert_eq!(expected, ok2);

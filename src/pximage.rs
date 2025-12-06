@@ -1,7 +1,7 @@
 //! Wrappers to convert to and from PNG.
 //! It would be nice to support APNG at some point. But for now, just PNG.
 
-use super::{Oklab, DitherOptions};
+use super::{Oklabr, DitherOptions};
 use image::{ImageReader, Rgb, ImageBuffer};
 
 use std::ops::{Index, IndexMut};
@@ -12,7 +12,7 @@ use rand_xoshiro::{Xoshiro256StarStar};
 
 // /// A 2D array of stuffs.
 pub struct PxImage {
-    data: Vec<Oklab>,
+    data: Vec<Oklabr>,
     dims: (u32, u32),
 }
 
@@ -25,7 +25,7 @@ impl PxImage {
         let w = img.width();
         let h = img.height();
         let data = img.pixels()
-            .map(|rgb| Oklab::from_srgb_triple(&rgb.0))
+            .map(|rgb| Oklabr::from_srgb_triple(&rgb.0))
             .collect::<Vec<_>>();
         Self::new(data, (w, h))
     }
@@ -39,7 +39,7 @@ impl PxImage {
             |i,j| {
                 let (i,j) = (i as usize, j as usize);
                 let px = self[(i,j)];
-                // TODO: make this use Oklab methods.
+                // TODO: make this use Oklabr methods.
                 let srgb = px.to_srgb();
                 Rgb::<u8>([
                     (srgb.r * 255.0).clamp(0.0, 255.0) as u8,
@@ -50,7 +50,7 @@ impl PxImage {
         img.save(s).unwrap();
     }
 
-    fn new(data: Vec<Oklab>, dims: (u32, u32)) -> Self {
+    fn new(data: Vec<Oklabr>, dims: (u32, u32)) -> Self {
         assert!(data.len() == dims.0 as usize * dims.1 as usize);
         assert!(data.len() > 0);
         Self { data, dims }
@@ -64,7 +64,7 @@ impl PxImage {
     /// For now: 8-bit indexed colour only. Consider other bits later.
     pub fn knoll_dither(&self,
         options: &DitherOptions,
-        palette: &[([u8; 3], Oklab)],
+        palette: &[([u8; 3], Oklabr)],
     ) -> Vec<u8> {
         let w = self.dims.0 as usize; let h = self.dims.1 as usize;
         let n = options.num_samples as usize;
@@ -95,12 +95,12 @@ impl PxImage {
     // Overwrites candidates.
     pub fn knoll_dither_inner(
         candidates: &mut [usize],
-        palette: &[Oklab],
-        pixel: &Oklab,
+        palette: &[Oklabr],
+        pixel: &Oklabr,
         n: usize,
         strength: f32)
     {
-        let mut error = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+        let mut error = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
         for it in 0..n {
             let attempt = *pixel + error * strength;
             let (argclosest, closest) = palette.iter().enumerate()
@@ -111,7 +111,7 @@ impl PxImage {
             candidates[it] = argclosest;
         }
 
-        // The default order on Oklab colours is increasing by luminance,
+        // The default order on Oklabr colours is increasing by luminance,
         // which is what we need here.
         candidates.sort_unstable_by_key(|&i| palette[i]);
     }
@@ -120,10 +120,10 @@ impl PxImage {
     /// k must be positive. The palette will generally consist of
     /// exactly k colours unless the original image has fewer colours.
     /// Performs kmeans clustering with kmeans++ initialisation.
-    /// (todo: should I transpose from Oklab back into eg rgb888,
+    /// (todo: should I transpose from Oklabr back into eg rgb888,
     /// then back again?)
     /// The palette will have at least one colour in it.
-    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<([u8; 3], Oklab)> {
+    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<([u8; 3], Oklabr)> {
         let mut rng = Xoshiro256StarStar::seed_from_u64(random_seed);
 
         let centroids = Self::naive_k_means(&self.data, k, &mut rng);
@@ -138,24 +138,24 @@ impl PxImage {
             })
             .collect::<HashSet<_>>();
 
-        // Map back to Oklab colours and sort. (The Oklab ordering
+        // Map back to Oklabr colours and sort. (The Oklabr ordering
         // sort by luminance first, which is what we are mainly
         // interested in.)
         let mut centroids = centroids_rgb.into_iter()
-            .map(|c| (c, Oklab::from_srgb888(&c)))
+            .map(|c| (c, Oklabr::from_srgb888(&c)))
             .collect::<Vec<_>>();
         centroids.sort_unstable_by_key(|(_,c)| *c);
 
         centroids
     }
 
-    // Naive k-means on Oklab colours.
+    // Naive k-means on Oklabr colours.
     // Precondition: points is non-empty and k > 0.
     fn naive_k_means(
-        points: &[Oklab],
+        points: &[Oklabr],
         k: usize,
         rng: &mut impl Rng,
-    ) -> Vec<Oklab> {
+    ) -> Vec<Oklabr> {
         let mut centroids = Self::kmeans_initial(points, k, rng);
         if centroids.len() < k {
             return centroids;
@@ -191,7 +191,7 @@ impl PxImage {
 
             // Recalculate the centroids of each cluster.
             for c in centroids.iter_mut() {
-                *c = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+                *c = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
             }
             for (i_p, p) in points.iter().enumerate() {
                 let centroid_idx = centroid_idxes[i_p];
@@ -220,10 +220,10 @@ impl PxImage {
     /// algorithm as these points are a perfect cluster.
     /// Will always return at least one element.
     fn kmeans_initial(
-        points: &[Oklab],
+        points: &[Oklabr],
         k: usize,
         rng: &mut impl Rng,
-    ) -> Vec<Oklab> {
+    ) -> Vec<Oklabr> {
         // Initialise list of centroids with a random point.
         let mut centroids = Vec::with_capacity(k);
         let idx0 = rng.random_range(..points.len());
@@ -282,7 +282,7 @@ impl PxImage {
 }
 
 impl Index<(usize, usize)> for PxImage {
-    type Output = Oklab;
+    type Output = Oklabr;
 
     fn index(&self, ij: (usize, usize)) -> &Self::Output {
         let (i, j) = ij;
@@ -396,7 +396,7 @@ use png::{BitDepth, SrgbRenderingIntent, ColorType, DeflateCompression};
 pub fn write_indexed_png(
     path: &str,
     dims: (u32, u32),
-    palette: &[([u8; 3], Oklab)],
+    palette: &[([u8; 3], Oklabr)],
     data: &[u8],
 ) {
     let file = File::create(path).unwrap();
@@ -510,10 +510,10 @@ mod test {
     fn test_kmeans_rect_full() {
         let img = PxImage {
             data: vec![
-                Oklab { l: 0.5, a: 0.0, b: 0.0 },
-                Oklab { l: 0.5, a: 0.0, b: 0.5 },
-                Oklab { l: 0.5, a: 1.0, b: 0.0 },
-                Oklab { l: 0.5, a: 1.0, b: 0.5 },
+                Oklabr { l: 0.5, a: 0.0, b: 0.0 },
+                Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+                Oklabr { l: 0.5, a: 1.0, b: 0.0 },
+                Oklabr { l: 0.5, a: 1.0, b: 0.5 },
             ],
             dims: (2,2),
         };
@@ -521,74 +521,74 @@ mod test {
         let seed = 0xdeadbeef;
         let q = img.palette(k, seed);
         assert_eq!(q, vec![
-            Oklab { l: 0.5, a: 1.0, b: 0.25 },
-            Oklab { l: 0.5, a: 0.0, b: 0.25 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.25 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.25 },
         ]);
     }
 
     #[test]
     fn test_kmeans_rect() {
         let points = [
-            Oklab { l: 0.5, a: 0.0, b: 0.0 },
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
-            Oklab { l: 0.5, a: 1.0, b: 0.0 },
-            Oklab { l: 0.5, a: 1.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.0 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.0 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.5 },
         ];
         let k = 2usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
         let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
-            Oklab { l: 0.5, a: 1.0, b: 0.5 },
-            Oklab { l: 0.5, a: 0.0, b: 0.0 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.0 },
         ], initial);
     }
 
     #[test]
     fn test_kmeans_all_the_same() {
         let points = [
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
         ];
         let k = 2usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
         let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
         ], initial);
     }
 
     #[test]
     fn test_kmeans_k_larger_than_points() {
         let points = [
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
-            Oklab { l: 0.5, a: 1.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.5 },
         ];
         let k = 3usize;
         let mut rng = Xoshiro256StarStar::seed_from_u64(0xdeadbeef);
         let initial = PxImage::kmeans_initial(&points, k, &mut rng);
         assert_eq!(vec![
-            Oklab { l: 0.5, a: 1.0, b: 0.5 },
-            Oklab { l: 0.5, a: 0.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 1.0, b: 0.5 },
+            Oklabr { l: 0.5, a: 0.0, b: 0.5 },
         ], initial);
     }
 
     #[test]
     fn test_knoll_dither_inner() {
         let n = 8;
-        let mut candidates = [Oklab::BLACK; 8];
-        let pixel = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+        let mut candidates = [Oklabr::BLACK; 8];
+        let pixel = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
         let palette = [
-            Oklab { l: -1.0, a: 0.0, b: 0.0 },
-            Oklab { l: 2.0, a: 0.0, b: 0.0 },
+            Oklabr { l: -1.0, a: 0.0, b: 0.0 },
+            Oklabr { l: 2.0, a: 0.0, b: 0.0 },
         ];
         let strength = 0.5;
 
         PxImage::knoll_dither_inner(&mut candidates, &palette, &pixel,
             n, strength);
 
-        assert_eq!(vec![Oklab::BLACK], candidates);
+        assert_eq!(vec![Oklabr::BLACK], candidates);
     }
 
     #[test]

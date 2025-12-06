@@ -1,7 +1,7 @@
 use std::io;
 use image::ImageReader;
 
-use dither::{Oklab, PxImage, DitherOptions, PaletteOptions, Problem};
+use dither::{Oklabr, PxImage, DitherOptions, PaletteOptions, Problem};
 
 fn main() {
     // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
@@ -18,8 +18,8 @@ fn main() {
     }
 
 
-    let blue = Oklab::from_srgb_888_str("#0000ff").unwrap();
-    let cyan = Oklab::from_srgb_888_str("#00ffff").unwrap();
+    let blue = Oklabr::from_srgb_888_str("#0000ff").unwrap();
+    let cyan = Oklabr::from_srgb_888_str("#00ffff").unwrap();
     println!("{blue:?}, {cyan:?}");
     let halfway = (blue + cyan) / 2.0;
     println!("halfway: {halfway:?}, {:?}", halfway.to_srgb());
@@ -28,38 +28,38 @@ fn main() {
 
     println!("Computing palette");
     // let pal = img.palette(2, 0xbeefdead);
-    let pal = [Oklab::WHITE, Oklab::BLACK];
+    let pal = [Oklabr::WHITE, Oklabr::BLACK];
 
     // let pal = [
-    //     Oklab { l: 0.24, a: 0.01, b: -0.04 },
-    //     Oklab { l: 0.72, a: -0.18, b: 0.12 },
-    //     Oklab { l: 0.68, a: 0.08, b: 0.13 },
-    //     Oklab { l: 0.56, a: 0.19, b: 0.08 },
-    //     Oklab { l: 0.53, a: 0.08, b: -0.12 },
-    //     Oklab { l: 0.64, a: -0.06, b: -0.13 },
-    //     Oklab { l: 0.99, a: 0.0, b: 0.01 },
+    //     Oklabr { l: 0.24, a: 0.01, b: -0.04 },
+    //     Oklabr { l: 0.72, a: -0.18, b: 0.12 },
+    //     Oklabr { l: 0.68, a: 0.08, b: 0.13 },
+    //     Oklabr { l: 0.56, a: 0.19, b: 0.08 },
+    //     Oklabr { l: 0.53, a: 0.08, b: -0.12 },
+    //     Oklabr { l: 0.64, a: -0.06, b: -0.13 },
+    //     Oklabr { l: 0.99, a: 0.0, b: 0.01 },
     // ];
 
     // let pal = [
-    //     Oklab { l: 0.084, a: 0.03, b: 0.02 },
-    //     Oklab { l: 0.22, a: 0.0, b: 0.03 },
-    //     Oklab { l: 0.31, a: 0.03, b: 0.04 },
-    //     Oklab { l: 0.32, a: 0.03, b: 0.05 },
+    //     Oklabr { l: 0.084, a: 0.03, b: 0.02 },
+    //     Oklabr { l: 0.22, a: 0.0, b: 0.03 },
+    //     Oklabr { l: 0.31, a: 0.03, b: 0.04 },
+    //     Oklabr { l: 0.32, a: 0.03, b: 0.05 },
 
-    //     Oklab { l: 0.35, a: -0.06, b: 0.07 },
-    //     Oklab { l: 0.43, a: 0.0, b: 0.07 },
-    //     Oklab { l: 0.57, a: 0.03, b: 0.1 },
-    //     Oklab { l: 0.48, a: 0.15, b: 0.09 },
+    //     Oklabr { l: 0.35, a: -0.06, b: 0.07 },
+    //     Oklabr { l: 0.43, a: 0.0, b: 0.07 },
+    //     Oklabr { l: 0.57, a: 0.03, b: 0.1 },
+    //     Oklabr { l: 0.48, a: 0.15, b: 0.09 },
 
-    //     Oklab { l: 0.36, a: 0.01, b: -0.12 },
-    //     Oklab { l: 0.49, a: -0.11, b: 0.1 },
-    //     Oklab { l: 0.82, a: -0.04, b: 0.15 },
-    //     Oklab { l: 0.77, a: 0.07, b: 0.08 },
+    //     Oklabr { l: 0.36, a: 0.01, b: -0.12 },
+    //     Oklabr { l: 0.49, a: -0.11, b: 0.1 },
+    //     Oklabr { l: 0.82, a: -0.04, b: 0.15 },
+    //     Oklabr { l: 0.77, a: 0.07, b: 0.08 },
 
-    //     Oklab { l: 0.64, a: -0.03, b: -0.05 },
-    //     Oklab { l: 0.83, a: 0.01, b: 0.03 },
-    //     Oklab { l: 0.92, a: -0.02, b: 0.14 },
-    //     Oklab { l: 0.98, a: -0.01, b: 0.03 },
+    //     Oklabr { l: 0.64, a: -0.03, b: -0.05 },
+    //     Oklabr { l: 0.83, a: 0.01, b: 0.03 },
+    //     Oklabr { l: 0.92, a: -0.02, b: 0.14 },
+    //     Oklabr { l: 0.98, a: -0.01, b: 0.03 },
     // ];
     let pal = pal.into_iter().map(|c| (c.to_srgb().to_srgb888(), c)).collect::<Vec<_>>();
 
