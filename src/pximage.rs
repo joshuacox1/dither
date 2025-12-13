@@ -103,7 +103,7 @@ impl PxImage {
     {
         let mut error = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
         for it in 0..n {
-            let attempt = *pixel + error * strength;
+            let attempt = pixel + error * strength;
             let (argclosest, closest) = palette.iter().enumerate()
                 .min_by(|(i,p),(j,q)| p.sq_dist(&attempt)
                     .total_cmp(&q.sq_dist(&attempt)))

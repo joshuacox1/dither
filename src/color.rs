@@ -28,14 +28,14 @@ impl Oklabr {
 
     /// Converts an `Oklabr` colour to an RGB888 colour, clamping
     /// each RGB channel if the colour is out of gamut. For best results
-    /// it is recommended to call `srgb_gamut_map` on the colour first
+    /// it is recommended to call `RgbF32_gamut_map` on the colour first
     /// to obtain a suitably gamut-mapped `Oklabr` colour.
     pub fn to_rgb888(&self) -> Rgb888 {
-        self.to_srgb().to_rgb888()
+        self.to_RgbF32().to_rgb888()
     }
 
-    /// Convert to gamma-encoded RGB in the sRGB colour space.
-    fn to_srgb(&self) -> Srgb {
+    /// Convert to gamma-encoded RGB in the RgbF32 colour space.
+    fn to_RgbF32(&self) -> RgbF32 {
         let old_l = Self::new_to_old_lightness(self.l);
 
         let l_ = old_l + 0.3963377774f32*self.a + 0.2158037573f32*self.b;
@@ -50,10 +50,10 @@ impl Oklabr {
         let g_ = -1.2684380046f32*l + 2.6097574011f32*m - 0.3413193965f32*s;
         let b_ = -0.0041960863f32*l - 0.7034186147f32*m + 1.7076147010f32*s;
 
-        Srgb {
-            r: Srgb::delinearise(r_),
-            g: Srgb::delinearise(g_),
-            b: Srgb::delinearise(b_),
+        RgbF32 {
+            r: RgbF32::delinearise(r_),
+            g: RgbF32::delinearise(g_),
+            b: RgbF32::delinearise(b_),
         }
     }
 
@@ -96,11 +96,11 @@ impl Oklabr {
         if self.l < cutoff { &Self::WHITE } else { &Self::BLACK }
     }
 
-    /// If the colour is within the sRGB gamut, returns a reference
+    /// If the colour is within the RgbF32 gamut, returns a reference
     /// to it. Otherwise computes a suitably close colour within the
-    /// sRGB gamut and returns that (owned). TODO: link the gamut
+    /// RgbF32 gamut and returns that (owned). TODO: link the gamut
     /// mapping article. This is a highly complex operation.
-    pub fn srgb_gamut_map(&self) -> Cow<'_, Self> {
+    pub fn RgbF32_gamut_map(&self) -> Cow<'_, Self> {
         // todo: make this do something.
         Cow::Borrowed(self)
     }
@@ -114,7 +114,7 @@ impl Oklabr {
     }
 }
 
-// TODO: take ownership of neither. TODO: hash?
+// TODO: hash?
 
 impl Add for Oklabr {
     type Output = Self;
@@ -128,8 +128,52 @@ impl Add for Oklabr {
     }
 }
 
+impl Add<&Oklabr> for Oklabr {
+    type Output = Self;
+
+    fn add(self, other: &Oklabr) -> Self {
+        Self {
+            l: self.l + other.l,
+            a: self.a + other.a,
+            b: self.b + other.b,
+        }
+    }
+}
+
+impl Add<Oklabr> for &Oklabr {
+    type Output = Oklabr;
+
+    fn add(self, other: Oklabr) -> Oklabr {
+        Oklabr {
+            l: self.l + other.l,
+            a: self.a + other.a,
+            b: self.b + other.b,
+        }
+    }
+}
+
+impl Add for &Oklabr {
+    type Output = Oklabr;
+
+    fn add(self, other: Self) -> Oklabr {
+        Oklabr {
+            l: self.l + other.l,
+            a: self.a + other.a,
+            b: self.b + other.b,
+        }
+    }
+}
+
 impl AddAssign for Oklabr {
     fn add_assign(&mut self, other: Self) {
+        self.l += other.l;
+        self.a += other.a;
+        self.b += other.b;
+    }
+}
+
+impl AddAssign<&Oklabr> for Oklabr {
+    fn add_assign(&mut self, other: &Oklabr) {
         self.l += other.l;
         self.a += other.a;
         self.b += other.b;
@@ -148,8 +192,52 @@ impl Sub for Oklabr {
     }
 }
 
+impl Sub<&Oklabr> for Oklabr {
+    type Output = Self;
+
+    fn sub(self, other: &Oklabr) -> Self {
+        Self {
+            l: self.l - other.l,
+            a: self.a - other.a,
+            b: self.b - other.b,
+        }
+    }
+}
+
+impl Sub<Oklabr> for &Oklabr {
+    type Output = Oklabr;
+
+    fn sub(self, other: Oklabr) -> Oklabr {
+        Oklabr {
+            l: self.l - other.l,
+            a: self.a - other.a,
+            b: self.b - other.b,
+        }
+    }
+}
+
+impl Sub for &Oklabr {
+    type Output = Oklabr;
+
+    fn sub(self, other: Self) -> Oklabr {
+        Oklabr {
+            l: self.l - other.l,
+            a: self.a - other.a,
+            b: self.b - other.b,
+        }
+    }
+}
+
 impl SubAssign for Oklabr {
     fn sub_assign(&mut self, other: Self) {
+        self.l -= other.l;
+        self.a -= other.a;
+        self.b -= other.b;
+    }
+}
+
+impl SubAssign<&Oklabr> for Oklabr {
+    fn sub_assign(&mut self, other: &Oklabr) {
         self.l -= other.l;
         self.a -= other.a;
         self.b -= other.b;
@@ -168,11 +256,55 @@ impl Mul<f32> for Oklabr {
     }
 }
 
+impl Mul<&f32> for Oklabr {
+    type Output = Self;
+
+    fn mul(self, rhs: &f32) -> Self {
+        Self {
+            l: self.l * *rhs,
+            a: self.a * *rhs,
+            b: self.b * *rhs,
+        }
+    }
+}
+
+impl Mul<f32> for &Oklabr {
+    type Output = Oklabr;
+
+    fn mul(self, rhs: f32) -> Oklabr {
+        Oklabr {
+            l: self.l * rhs,
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
+    }
+}
+
+impl Mul<&f32> for &Oklabr {
+    type Output = Oklabr;
+
+    fn mul(self, rhs: &f32) -> Oklabr {
+        Oklabr {
+            l: self.l * *rhs,
+            a: self.a * *rhs,
+            b: self.b * *rhs,
+        }
+    }
+}
+
 impl MulAssign<f32> for Oklabr {
     fn mul_assign(&mut self, rhs: f32) {
         self.l *= rhs;
         self.a *= rhs;
         self.b *= rhs;
+    }
+}
+
+impl MulAssign<&f32> for Oklabr {
+    fn mul_assign(&mut self, rhs: &f32) {
+        self.l *= *rhs;
+        self.a *= *rhs;
+        self.b *= *rhs;
     }
 }
 
@@ -188,18 +320,6 @@ impl Div<f32> for Oklabr {
     }
 }
 
-impl Div<f32> for &Oklabr {
-    type Output = Oklabr;
-
-    fn div(self, rhs: f32) -> Oklabr {
-        Oklabr {
-            l: self.l / rhs,
-            a: self.a / rhs,
-            b: self.b / rhs,
-        }
-    }
-}
-
 impl Div<&f32> for Oklabr {
     type Output = Self;
 
@@ -208,6 +328,18 @@ impl Div<&f32> for Oklabr {
             l: self.l / *rhs,
             a: self.a / *rhs,
             b: self.b / *rhs,
+        }
+    }
+}
+
+impl Div<f32> for &Oklabr {
+    type Output = Oklabr;
+
+    fn div(self, rhs: f32) -> Oklabr {
+        Oklabr {
+            l: self.l / rhs,
+            a: self.a / rhs,
+            b: self.b / rhs,
         }
     }
 }
@@ -229,6 +361,14 @@ impl DivAssign<f32> for Oklabr {
         self.l /= rhs;
         self.a /= rhs;
         self.b /= rhs;
+    }
+}
+
+impl DivAssign<&f32> for Oklabr {
+    fn div_assign(&mut self, rhs: &f32) {
+        self.l /= *rhs;
+        self.a /= *rhs;
+        self.b /= *rhs;
     }
 }
 
@@ -254,26 +394,16 @@ impl PartialEq for Oklabr {
     }
 }
 
-impl Eq for Oklabr {}
+impl Eq for Oklabr { }
 
 impl fmt::Display for Oklabr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: should this show old or revised lightness
         write!(f, "({:.2}%,{:.4},{:.4})", self.l*100.0, self.a, self.b)
     }
 }
 
-
-// ///
-// fn srgb_gamut_mapping() {
-
-// }
-
-
-
-
-
-
-// // Finds the maximum saturation possible for a given hue that fits in sRGB
+// // Finds the maximum saturation possible for a given hue that fits in RgbF32
 // // Saturation here is defined as S = C/L
 // // a and b must be normalized so a^2 + b^2 == 1
 // fn compute_max_saturation(a: f32, b: f32)
@@ -350,8 +480,8 @@ impl fmt::Display for Oklabr {
 //     // First, find the maximum saturation (saturation S = C/L)
 //     let S_cusp = compute_max_saturation(a, b);
 
-//     // Convert to linear sRGB to find the first point where at least one of r,g or b >= 1:
-//     RGB rgb_at_max = oklab_to_linear_srgb(Oklabr { 1.0, S_cusp * a, S_cusp * b });
+//     // Convert to linear RgbF32 to find the first point where at least one of r,g or b >= 1:
+//     RGB rgb_at_max = oklab_to_linear_RgbF32(Oklabr { 1.0, S_cusp * a, S_cusp * b });
 //     float L_cusp = cbrtf(1.0 / max(max(rgb_at_max.r, rgb_at_max.g), rgb_at_max.b));
 //     float C_cusp = L_cusp * S_cusp;
 
@@ -478,13 +608,13 @@ impl fmt::Display for Oklabr {
 
 
 
-/// Gamma-encoded sRGB.
+/// Gamma-encoded RgbF32.
 /// TODO: make this linear. Apply gamma later?
 /// TODO: rename this RgbF32.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Srgb { pub r: f32, pub g: f32, pub b: f32 }
+pub struct RgbF32 { pub r: f32, pub g: f32, pub b: f32 }
 
-impl Srgb {
+impl RgbF32 {
     fn linearise(x: f32) -> f32 {
         if x >= 0.04045 {
             ((x + 0.055)/(1.0 + 0.055)).powf(2.4)
@@ -501,7 +631,7 @@ impl Srgb {
         }
     }
 
-    // https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
+    // https://bottosson.github.io/posts/oklab/#converting-from-linear-RgbF32-to-oklab
     pub fn to_oklabr(&self) -> Oklabr {
         // linearise
         let r = Self::linearise(self.r);
@@ -541,7 +671,7 @@ impl Srgb {
     }
 }
 
-/// 24-bit RGB true colour. Intended to be interpreted in the sRGB
+/// 24-bit RGB true colour. Intended to be interpreted in the RgbF32
 /// colour space.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Rgb888 {
@@ -554,15 +684,15 @@ pub struct Rgb888 {
 }
 
 impl Rgb888 {
-    fn to_rgbf32(&self) -> Srgb {
-        Srgb {
+    fn to_rgbf32(&self) -> RgbF32 {
+        RgbF32 {
             r: self.r as f32 / 255.0,
             g: self.g as f32 / 255.0,
             b: self.b as f32 / 255.0,
         }
     }
 
-    /// Maps an `Rgb888` interpreted in the sRGB colour space to its
+    /// Maps an `Rgb888` interpreted in the RgbF32 colour space to its
     /// corresponding `Oklabr` colour.
     pub fn to_oklabr(&self) -> Oklabr {
         self.to_rgbf32().to_oklabr()
@@ -629,8 +759,8 @@ mod test {
     #[test]
     fn oklab_makesure() {
         let c1 = "#ab6519"; let c2 = "#AB6519";
-        let ok1 = Oklabr::from_srgb_888_str(c1).unwrap();
-        let ok2 = Oklabr::from_srgb_888_str(c2).unwrap();
+        let ok1 = Oklabr::from_RgbF32_888_str(c1).unwrap();
+        let ok2 = Oklabr::from_RgbF32_888_str(c2).unwrap();
         let expected = Oklabr { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
 
         assert_eq!(expected, ok1);
