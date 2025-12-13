@@ -1,11 +1,15 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign, Div, DivAssign, Mul, MulAssign};
 use std::cmp::Ordering;
 use std::fmt;
+use std::fmt::Write;
+use std::borrow::Cow;
 
-/// A colour in the Oklab colour space.
-/// PROBABLY going to use the revised lightness estimate.
+/// A colour in the Oklab colour space. Uses the revised lightness
+/// estimate L_r described in <https://bottosson.github.io/posts/colorpicker/#intermission---a-new-lightness-estimate-for-oklab>,
+/// which significantly improves lightness prediction.
+/// TODO: rename Oklab and store l_r internally. Various discussions.
 #[derive(Debug, Copy, Clone)]
-pub struct Oklab {
+pub struct Oklabr {
     pub l: f32,
     pub a: f32,
     pub b: f32,
@@ -17,9 +21,21 @@ const K1: f32 = 0.206;
 const K2: f32 = 0.03;
 const K3: f32 = (1.0 + K1) / (1.0 + K2);
 
-impl Oklab {
+impl Oklabr {
+    /// The original `l` component of an `Oklab` colour. Not the "revised lightness
+    /// estimate" described in [link].
+    pub fn l(&self) -> f32 { Self::new_to_old_lightness(self.l) }
+
+    /// Converts an `Oklabr` colour to an RGB888 colour, clamping
+    /// each RGB channel if the colour is out of gamut. For best results
+    /// it is recommended to call `srgb_gamut_map` on the colour first
+    /// to obtain a suitably gamut-mapped `Oklabr` colour.
+    pub fn to_rgb888(&self) -> Rgb888 {
+        self.to_srgb().to_rgb888()
+    }
+
     /// Convert to gamma-encoded RGB in the sRGB colour space.
-    pub fn to_srgb(&self) -> Srgb {
+    fn to_srgb(&self) -> Srgb {
         let old_l = Self::new_to_old_lightness(self.l);
 
         let l_ = old_l + 0.3963377774f32*self.a + 0.2158037573f32*self.b;
@@ -42,19 +58,17 @@ impl Oklab {
     }
 
     fn old_to_new_lightness(l: f32) -> f32 {
-        return l;
         let x = K3*l - K1;
         0.5*(x + (x*x + 4.0*K2*K3*l).sqrt())
     }
 
     fn new_to_old_lightness(l_r: f32) -> f32 {
-        return l_r;
         let top = l_r * (l_r + K1);
         let bottom = K3 * (l_r + K2);
         top / bottom
     }
 
-    /// Squared distance between this Oklab colour and another.
+    /// Squared distance between this Oklabr colour and another.
     pub fn sq_dist(&self, other: &Self) -> f32 {
         let l_d = other.l - self.l;
         let a_d = other.a - self.a;
@@ -62,30 +76,13 @@ impl Oklab {
         l_d*l_d + a_d*a_d + b_d*b_d
     }
 
-    pub const WHITE: Oklab = Oklab { l: 1.0, a: 0.0, b: 0.0 };
-    pub const BLACK: Oklab = Oklab { l: 0.0, a: 0.0, b: 0.0 };
+    pub const WHITE: Oklabr = Oklabr { l: 1.0, a: 0.0, b: 0.0 };
+    pub const BLACK: Oklabr = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
 
-    /// Panics if `rgb` is not of length 3.
-    pub fn from_srgb888(rgb: &[u8]) -> Self {
-        assert!(rgb.len() == 3);
-        Srgb::from_srgb888(rgb).to_oklab()
-    }
-
-    /// Panics if `rgb` is not of length 3.
-    pub fn from_srgb_triple(rgb: &[f32]) -> Self {
-        assert!(rgb.len() == 3);
-        Srgb::to_oklab(&Srgb { r: rgb[0], g: rgb[1], b: rgb[2] })
-    }
-
-    /// From a string e.g. #ab6519 or #AB6519.
-    pub fn from_srgb_888_str(hash_rrggbb: &str) -> Result<Self, ()> {
-        Srgb::from_srgb_888_str(hash_rrggbb)
-            .map(|c| Srgb::to_oklab(&c))
-    }
-
-    /// Returns either white or black: whichever has the greater
-    /// contrast with the given colour.
-    pub fn white_or_black_most_contrast(&self) -> &'static Oklab {
+    /// Returns whichever of white or black has the greater
+    /// contrast with the given colour. One use of this is determining
+    /// whether text placed over this colour should be black or white.
+    pub fn white_or_black_most_contrast(&self) -> &'static Self {
         // Contrast is defined by the W3C as (L1 + 0.05) / (L2 + 0.05),
         // where L1 is the lightness of the lighter of the two colours
         // and L2 of the darker colour. Since white is lighter than
@@ -98,11 +95,28 @@ impl Oklab {
         let cutoff = 0.0525f32.sqrt() - 0.05f32;
         if self.l < cutoff { &Self::WHITE } else { &Self::BLACK }
     }
+
+    /// If the colour is within the sRGB gamut, returns a reference
+    /// to it. Otherwise computes a suitably close colour within the
+    /// sRGB gamut and returns that (owned). TODO: link the gamut
+    /// mapping article. This is a highly complex operation.
+    pub fn srgb_gamut_map(&self) -> Cow<'_, Self> {
+        // todo: make this do something.
+        Cow::Borrowed(self)
+    }
+
+    /// Returns whether an `Oklabr` colour is _valid_. This is true
+    /// when all three components are finite. If `bound_l`, lightness
+    /// must also lie in `[0.0, 1.0]`.
+    pub fn is_valid(&self, bound_l: bool) -> bool {
+        self.l.is_finite() && self.a.is_finite() && self.b.is_finite()
+            && (!bound_l || (0.0 <= self.l && self.l <= 1.0))
+    }
 }
 
-// TODO: take ownership of both
+// TODO: take ownership of neither. TODO: hash?
 
-impl Add for Oklab {
+impl Add for Oklabr {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -114,7 +128,7 @@ impl Add for Oklab {
     }
 }
 
-impl AddAssign for Oklab {
+impl AddAssign for Oklabr {
     fn add_assign(&mut self, other: Self) {
         self.l += other.l;
         self.a += other.a;
@@ -122,7 +136,7 @@ impl AddAssign for Oklab {
     }
 }
 
-impl Sub for Oklab {
+impl Sub for Oklabr {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -134,7 +148,7 @@ impl Sub for Oklab {
     }
 }
 
-impl SubAssign for Oklab {
+impl SubAssign for Oklabr {
     fn sub_assign(&mut self, other: Self) {
         self.l -= other.l;
         self.a -= other.a;
@@ -142,7 +156,7 @@ impl SubAssign for Oklab {
     }
 }
 
-impl Mul<f32> for Oklab {
+impl Mul<f32> for Oklabr {
     type Output = Self;
 
     fn mul(self, rhs: f32) -> Self {
@@ -154,7 +168,7 @@ impl Mul<f32> for Oklab {
     }
 }
 
-impl MulAssign<f32> for Oklab {
+impl MulAssign<f32> for Oklabr {
     fn mul_assign(&mut self, rhs: f32) {
         self.l *= rhs;
         self.a *= rhs;
@@ -162,7 +176,7 @@ impl MulAssign<f32> for Oklab {
     }
 }
 
-impl Div<f32> for Oklab {
+impl Div<f32> for Oklabr {
     type Output = Self;
 
     fn div(self, rhs: f32) -> Self {
@@ -174,11 +188,11 @@ impl Div<f32> for Oklab {
     }
 }
 
-impl Div<f32> for &Oklab {
-    type Output = Oklab;
+impl Div<f32> for &Oklabr {
+    type Output = Oklabr;
 
-    fn div(self, rhs: f32) -> Oklab {
-        Oklab {
+    fn div(self, rhs: f32) -> Oklabr {
+        Oklabr {
             l: self.l / rhs,
             a: self.a / rhs,
             b: self.b / rhs,
@@ -186,7 +200,7 @@ impl Div<f32> for &Oklab {
     }
 }
 
-impl Div<&f32> for Oklab {
+impl Div<&f32> for Oklabr {
     type Output = Self;
 
     fn div(self, rhs: &f32) -> Self {
@@ -198,11 +212,11 @@ impl Div<&f32> for Oklab {
     }
 }
 
-impl Div<&f32> for &Oklab {
-    type Output = Oklab;
+impl Div<&f32> for &Oklabr {
+    type Output = Oklabr;
 
-    fn div(self, rhs: &f32) -> Oklab {
-        Oklab {
+    fn div(self, rhs: &f32) -> Oklabr {
+        Oklabr {
             l: self.l / *rhs,
             a: self.a / *rhs,
             b: self.b / *rhs,
@@ -210,7 +224,7 @@ impl Div<&f32> for &Oklab {
     }
 }
 
-impl DivAssign<f32> for Oklab {
+impl DivAssign<f32> for Oklabr {
     fn div_assign(&mut self, rhs: f32) {
         self.l /= rhs;
         self.a /= rhs;
@@ -218,7 +232,7 @@ impl DivAssign<f32> for Oklab {
     }
 }
 
-impl Ord for Oklab {
+impl Ord for Oklabr {
     fn cmp(&self, other: &Self) -> Ordering {
         self.l.total_cmp(&other.l)
             .then(self.a.total_cmp(&other.a))
@@ -226,13 +240,13 @@ impl Ord for Oklab {
     }
 }
 
-impl PartialOrd for Oklab {
+impl PartialOrd for Oklabr {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Oklab {
+impl PartialEq for Oklabr {
     fn eq(&self, other: &Self) -> bool {
         matches!(self.l.total_cmp(&other.l), Ordering::Equal)
             && matches!(self.a.total_cmp(&other.a), Ordering::Equal)
@@ -240,9 +254,9 @@ impl PartialEq for Oklab {
     }
 }
 
-impl Eq for Oklab {}
+impl Eq for Oklabr {}
 
-impl fmt::Display for Oklab {
+impl fmt::Display for Oklabr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:.2}%,{:.4},{:.4})", self.l*100.0, self.a, self.b)
     }
@@ -337,7 +351,7 @@ impl fmt::Display for Oklab {
 //     let S_cusp = compute_max_saturation(a, b);
 
 //     // Convert to linear sRGB to find the first point where at least one of r,g or b >= 1:
-//     RGB rgb_at_max = oklab_to_linear_srgb(Oklab { 1.0, S_cusp * a, S_cusp * b });
+//     RGB rgb_at_max = oklab_to_linear_srgb(Oklabr { 1.0, S_cusp * a, S_cusp * b });
 //     float L_cusp = cbrtf(1.0 / max(max(rgb_at_max.r, rgb_at_max.g), rgb_at_max.b));
 //     float C_cusp = L_cusp * S_cusp;
 
@@ -466,6 +480,7 @@ impl fmt::Display for Oklab {
 
 /// Gamma-encoded sRGB.
 /// TODO: make this linear. Apply gamma later?
+/// TODO: rename this RgbF32.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Srgb { pub r: f32, pub g: f32, pub b: f32 }
 
@@ -487,13 +502,13 @@ impl Srgb {
     }
 
     // https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
-    fn to_oklab(&self) -> Oklab {
+    pub fn to_oklabr(&self) -> Oklabr {
         // linearise
         let r = Self::linearise(self.r);
         let g = Self::linearise(self.g);
         let b = Self::linearise(self.b);
 
-        // oklabify.
+        // oklabify
         let l = 0.4122214708f32*r + 0.5363325363f32*g + 0.0514459929f32*b;
         let m = 0.2119034982f32*r + 0.6806995451f32*g + 0.1073969566f32*b;
         let s = 0.0883024619f32*r + 0.2817188376f32*g + 0.6299787005f32*b;
@@ -502,49 +517,68 @@ impl Srgb {
         let m_ = m.cbrt();
         let s_ = s.cbrt();
 
-        let mut result = Oklab {
-            l: 0.2104542553f32*l_ + 0.7936177850f32*m_ - 0.0040720468f32*s_,
-            a: 1.9779984951f32*l_ - 2.4285922050f32*m_ + 0.4505937099f32*s_,
-            b: 0.0259040371f32*l_ + 0.7827717662f32*m_ - 0.8086757660f32*s_,
-        };
+        let l = 0.2104542553f32*l_ + 0.7936177850f32*m_ - 0.0040720468f32*s_;
+        let a = 1.9779984951f32*l_ - 2.4285922050f32*m_ + 0.4505937099f32*s_;
+        let b = 0.0259040371f32*l_ + 0.7827717662f32*m_ - 0.8086757660f32*s_;
 
-        result.l = Oklab::old_to_new_lightness(result.l);
-        result
+        // revised lightness estimate
+        let l_r = Oklabr::old_to_new_lightness(l);
+
+        Oklabr { l: l_r, a, b, }
     }
 
-    pub fn to_srgb888(&self) -> [u8; 3] {
+    /// Converts to RGB 888, clamping within [0.0, 1.0] and rounding.
+    pub fn to_rgb888(&self) -> Rgb888 {
         fn discretise_8bit(x: f32) -> u8 {
             (x * 255.0).clamp(0.0, 255.0).round() as u8
         }
 
-        [
-            discretise_8bit(self.r),
-            discretise_8bit(self.g),
-            discretise_8bit(self.b),
-        ]
-    }
-
-    pub fn from_srgb888(rgb: &[u8]) -> Self {
-        let r = rgb[0] as f32 / 255.0;
-        let g = rgb[1] as f32 / 255.0;
-        let b = rgb[2] as f32 / 255.0;
-        Self { r, g, b }
-    }
-
-    pub fn to_srgb555(&self) -> u16 {
-        fn discretise_5bit(x: f32) -> u16 {
-            (x * 31.0).clamp(0.0, 31.0).round() as u16
+        Rgb888 {
+            r: discretise_8bit(self.r),
+            g: discretise_8bit(self.g),
+            b: discretise_8bit(self.b),
         }
-        let r_ = discretise_5bit(self.r);
-        let g_ = discretise_5bit(self.g);
-        let b_ = discretise_5bit(self.b);
-        let u = (r_ << 10) | (g_ << 5) | b_;
-        u
+    }
+}
+
+/// 24-bit RGB true colour. Intended to be interpreted in the sRGB
+/// colour space.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Rgb888 {
+    /// The red component.
+    pub r: u8,
+    /// The green component.
+    pub g: u8,
+    /// The blue component.
+    pub b: u8,
+}
+
+impl Rgb888 {
+    fn to_rgbf32(&self) -> Srgb {
+        Srgb {
+            r: self.r as f32 / 255.0,
+            g: self.g as f32 / 255.0,
+            b: self.b as f32 / 255.0,
+        }
     }
 
-    /// Parses a string of the form #xxyyzz where each pair is a valid
-    /// hex number.
-    fn from_srgb_888_str(input: &str) -> Result<Self, ()> {
+    /// Maps an `Rgb888` interpreted in the sRGB colour space to its
+    /// corresponding `Oklabr` colour.
+    pub fn to_oklabr(&self) -> Oklabr {
+        self.to_rgbf32().to_oklabr()
+    }
+
+    /// Converts an `Rgb888` into an #RRGGBB hex string.
+    pub fn to_str(&self) -> String {
+        let mut result = String::with_capacity(7);
+        let Self { r, g, b } = self;
+        write!(&mut result, "#{r:02x}{g:02x}{b:02x}").unwrap();
+        result
+    }
+
+    /// Attempts to parse an #RRGGBB hex string into an `Rgb888`.
+    pub fn from_str(input: &str) -> Result<Self, ()> {
+        // 0xff = ERROR.
         fn from_char_opt(x: u8) -> u8 {
             match x {
                 b'0' => 0, b'1' => 1, b'2' => 2, b'3' => 3, b'4' => 4,
@@ -565,44 +599,14 @@ impl Srgb {
         let b2 = from_char_opt(input_b[6]);
         if r1 == 0xff || r2 == 0xff || g1 == 0xff || g2 == 0xff
                 || b1 == 0xff || b2 == 0xff {
-            return Err(());
+            Err(())
+        } else {
+            Ok(Self {
+            r: 16*r1 + r2,
+            g: 16*g1 + g2,
+            b: 16*b1 + b2,
+            })
         }
-
-        let r = (16*r1 + r2) as f32 / 255.0;
-        let g = (16*g1 + g2) as f32 / 255.0;
-        let b = (16*b1 + b2) as f32 / 255.0;
-
-        Ok(Srgb { r, g, b })
-    }
-}
-
-/// 24-bit RGB true colour. Intended to be interpreted in the sRGB
-/// colour space.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Rgb888 {
-    /// The red component.
-    pub r: u8,
-    /// The green component.
-    pub g: u8,
-    /// The blue component.
-    pub b: u8,
-}
-
-impl Rgb888 {
-    /// Maps an `Rgb888` interpreted in the sRGB colour space to its
-    /// corresponding Oklab colour.
-    pub fn to_oklab(&self) -> Oklab {
-        todo!()
-    }
-
-    /// Converts an `Rgb888` into an #RRGGBB hex string.
-    pub fn to_str(&self) -> String {
-        todo!()
-    }
-
-    /// Attempts to parse an #RRGGBB hex string into an `Rgb888`.
-    pub fn from_str(hash_rrggbb: &str) -> Result<Self, ()> {
-        todo!()
     }
 }
 
@@ -613,9 +617,9 @@ mod test {
 
     #[test]
     fn oklab_impls() {
-        let c1 = Oklab { l: 1.0, a: 0.5, b: 0.75 };
-        let c2 = Oklab { l: 1.0, a: 0.5, b: 0.75 };
-        let c3 = Oklab { l: 1.0, a: 0.6, b: 0.75 };
+        let c1 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
+        let c2 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
+        let c3 = Oklabr { l: 1.0, a: 0.6, b: 0.75 };
         assert!(c1 == c2);
         assert!(c2 <= c3);
         assert!(c2 < c3);
@@ -625,11 +629,45 @@ mod test {
     #[test]
     fn oklab_makesure() {
         let c1 = "#ab6519"; let c2 = "#AB6519";
-        let ok1 = Oklab::from_srgb_888_str(c1).unwrap();
-        let ok2 = Oklab::from_srgb_888_str(c2).unwrap();
-        let expected = Oklab { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
+        let ok1 = Oklabr::from_srgb_888_str(c1).unwrap();
+        let ok2 = Oklabr::from_srgb_888_str(c2).unwrap();
+        let expected = Oklabr { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
 
         assert_eq!(expected, ok1);
         assert_eq!(expected, ok2);
+    }
+
+    #[test]
+    fn rgb888_from_str() {
+        let tests = [
+            ("#ab6519", Ok(Rgb888 { r: 0xab, g: 0x65, b: 0x19})),
+            ("#00B8FF", Ok(Rgb888 { r: 0x00, g: 0xb8, b: 0xff})),
+            ("#ab65g9", Err(())),
+        ];
+
+        for (s, expected_result) in tests {
+            let rgb = Rgb888::from_str(s);
+            assert_eq!(expected_result, rgb);
+        }
+    }
+
+    #[test]
+    fn rgb888_to_str() {
+        let tests = [
+            ("#ab6519", Rgb888 { r: 0xab, g: 0x65, b: 0x19}),
+            ("#00b8ff", Rgb888 { r: 0x00, g: 0xb8, b: 0xff}),
+        ];
+
+        for (expected_result, rgb) in tests {
+            let s = rgb.to_str();
+            assert_eq!(expected_result, s);
+        }
+    }
+
+    #[test]
+    fn test_oklabrify() {
+        let color = Rgb888::from_str("#ab6519").to_oklab();
+        let expected = Oklabr { l: 0.50523514, a: 0.05841787, b: 0.10804674 };
+        assert_eq!(expected, color);
     }
 }
