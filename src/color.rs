@@ -111,12 +111,12 @@ impl Oklabr {
     /// when all three components are finite. If `bound_l`, lightness
     /// must also lie in `[0.0, 1.0]`.
     pub fn is_valid(&self, bound_l: bool) -> bool {
-        self.l.is_finite() && self.a.is_finite() && self.is_finite()
+        self.l.is_finite() && self.a.is_finite() && self.b.is_finite()
             && (!bound_l || (0.0 <= self.l && self.l <= 1.0))
     }
 }
 
-// TODO: take ownership of both
+// TODO: take ownership of both. TODO: hash?
 
 impl Add for Oklabr {
     type Output = Self;
