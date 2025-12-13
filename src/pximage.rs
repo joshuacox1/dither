@@ -1,7 +1,7 @@
 //! Wrappers to convert to and from PNG.
 //! It would be nice to support APNG at some point. But for now, just PNG.
 
-use super::{Oklabr, DitherOptions};
+use super::{Oklabr, Rgb888, DitherOptions};
 use image::{ImageReader, Rgb, ImageBuffer};
 
 use std::ops::{Index, IndexMut};
@@ -21,34 +21,35 @@ impl PxImage {
         // todo: remove these unwraps lol.
         let img = ImageReader::open(s)
             .unwrap().decode().unwrap()
-            .into_rgb32f();
+            .into_rgb8();
         let w = img.width();
         let h = img.height();
         let data = img.pixels()
-            .map(|rgb| Oklabr::from_srgb_triple(&rgb.0))
+            .map(|rgb| Rgb888 { r: rgb[0], g: rgb[1], b: rgb[2] }.to_oklabr())
             .collect::<Vec<_>>();
         Self::new(data, (w, h))
     }
 
-    pub fn save_as_srgb_png(&self, s: &str) {
-        // rayon?!
-        // TODO: also, indexed colour?!
-        let (w,h) = self.dims;
-        let img = ImageBuffer::from_fn(
-            w, h,
-            |i,j| {
-                let (i,j) = (i as usize, j as usize);
-                let px = self[(i,j)];
-                // TODO: make this use Oklabr methods.
-                let srgb = px.to_srgb();
-                Rgb::<u8>([
-                    (srgb.r * 255.0).clamp(0.0, 255.0) as u8,
-                    (srgb.g * 255.0).clamp(0.0, 255.0) as u8,
-                    (srgb.b * 255.0).clamp(0.0, 255.0) as u8,
-                ])
-            });
-        img.save(s).unwrap();
-    }
+    // TODO: delete
+    // pub fn save_as_srgb_png(&self, s: &str) {
+    //     // rayon?!
+    //     // TODO: also, indexed colour?!
+    //     let (w,h) = self.dims;
+    //     let img = ImageBuffer::from_fn(
+    //         w, h,
+    //         |i,j| {
+    //             let (i,j) = (i as usize, j as usize);
+    //             let px = self[(i,j)];
+    //             // TODO: make this use Oklabr methods.
+    //             let srgb = px.to_srgb();
+    //             Rgb::<u8>([
+    //                 (srgb.r * 255.0).clamp(0.0, 255.0) as u8,
+    //                 (srgb.g * 255.0).clamp(0.0, 255.0) as u8,
+    //                 (srgb.b * 255.0).clamp(0.0, 255.0) as u8,
+    //             ])
+    //         });
+    //     img.save(s).unwrap();
+    // }
 
     fn new(data: Vec<Oklabr>, dims: (u32, u32)) -> Self {
         assert!(data.len() == dims.0 as usize * dims.1 as usize);
@@ -123,7 +124,7 @@ impl PxImage {
     /// (todo: should I transpose from Oklabr back into eg rgb888,
     /// then back again?)
     /// The palette will have at least one colour in it.
-    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<([u8; 3], Oklabr)> {
+    pub fn palette(&self, k: usize, random_seed: u64) -> Vec<(Rgb888, Oklabr)> {
         let mut rng = Xoshiro256StarStar::seed_from_u64(random_seed);
 
         let centroids = Self::naive_k_means(&self.data, k, &mut rng);
@@ -131,18 +132,14 @@ impl PxImage {
         // Discretize to RGB888. Ensure uniqueness (though in practice
         // it should almost never cause centroids to be merged this way).
         let centroids_rgb = centroids.into_iter()
-            .map(|c| {
-                let q = c.to_srgb();
-                println!("{q:?}");
-                q.to_srgb888()
-            })
+            .map(|c| c.to_rgb888())
             .collect::<HashSet<_>>();
 
         // Map back to Oklabr colours and sort. (The Oklabr ordering
         // sort by luminance first, which is what we are mainly
         // interested in.)
         let mut centroids = centroids_rgb.into_iter()
-            .map(|c| (c, Oklabr::from_srgb888(&c)))
+            .map(|c| (c, c.to_oklabr()))
             .collect::<Vec<_>>();
         centroids.sort_unstable_by_key(|(_,c)| *c);
 
