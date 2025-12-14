@@ -105,12 +105,17 @@ impl Oklabr {
         Cow::Borrowed(self)
     }
 
-    /// Returns whether an `Oklabr` colour is _valid_. This is true
-    /// when all three components are finite. If `bound_l`, lightness
-    /// must also lie in `[0.0, 1.0]`.
-    pub fn is_valid(&self, bound_l: bool) -> bool {
+    /// Returns whether an `Oklabr` colour is "well-formed", meaning
+    /// none of the entries are infinities or NaN.
+    pub fn is_well_formed(&self) -> bool {
         self.l.is_finite() && self.a.is_finite() && self.b.is_finite()
-            && (!bound_l || (0.0 <= self.l && self.l <= 1.0))
+    }
+
+    /// Returns whether an `Oklabr` colour is in the `Oklabr` gamut.
+    /// This is true when all three components are non-infinite-or-NaN
+    /// and `l` lies in `[0.0, 1.0]`.
+    pub fn is_in_gamut(&self) -> bool {
+        self.is_well_formed() && 0.0 <= self.l && self.l <= 1.0
     }
 }
 

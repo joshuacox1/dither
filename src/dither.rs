@@ -30,6 +30,28 @@ pub trait Dither {
     }
 }
 
+/// No dithering at all. Just maps each pixel to its closest
+/// palette entry in Oklabr space.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct NoDither;
+
+impl Dither for NoDither {
+    fn dither(
+        &self,
+        image: &Image<Oklabr>,
+        palette: &[Oklabr],
+    ) -> Image<u8> {
+        // TODO: Consider implementing a kd-tree for faster nearest
+        // neighbour comparisons.
+        // TODO: par-iter everything. Or implement on the GPU?
+        image.map_pixels(|px| {
+            palette.iter().enumerate()
+                .min_by(|(_,p),(_,q)| p.sq_dist(&px)
+                    .total_cmp(&q.sq_dist(&px)))
+                .unwrap().0 as u8
+        }).unwrap()
+    }
+}
 
 /// Implements the Knoll ordered dithering algorithm with a Bayer
 /// matrix. TODO: further description
@@ -66,28 +88,4 @@ impl Dither for KnollDither {
         todo!()
     }
 }
-
-/// No dithering at all. Just maps each pixel to its closest
-/// palette entry in Oklabr space.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct NoDither;
-
-impl Dither for NoDither {
-    fn dither(
-        &self,
-        image: &Image<Oklabr>,
-        palette: &[Oklabr],
-    ) -> Image<u8> {
-        // TODO: Consider implementing a kd-tree for faster nearest
-        // neighbour comparisons.
-        // TODO: par-iter everything. Or implement on the GPU?
-        image.map_pixels(|px| {
-            palette.iter().enumerate()
-                .min_by(|(_,p),(_,q)| p.sq_dist(&px)
-                    .total_cmp(&q.sq_dist(&px)))
-                .unwrap().0 as u8
-        }).unwrap()
-    }
-}
-
 
