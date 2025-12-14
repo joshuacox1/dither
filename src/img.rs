@@ -4,6 +4,10 @@ use std::io;
 
 use super::{Vec2D, Rgb888};
 
+use png::{Encoder, EncodingError,
+    ColorType, SrgbRenderingIntent, DeflateCompression,
+    BitDepth};
+
 /// An image consisting of one or more frames, each a 2D grid of pixels
 /// (width and height both positive).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -128,10 +132,120 @@ impl Image<u8> {
     /// (1-bit if <= 2 colours, 2-bit if <= 4 colours, 4-bit if <= 16 colours,
     /// 8-bit if <= 256 colours). The palette size must be between 1 and 256.
     /// Throws an error if a pixel is OOB? Or just writes an invalid PNG?
-    pub fn write_png<W: Write>(writer: W, palette: &[Rgb888]) -> io::Result<()> {
-        todo!()
+    ///
+    /// NOTE: This currently only writes out the first frame. APNG is not supported.
+    /// Further work is to write a valid APNG with all the frames.
+    /// Further further work is to optimise that APNG with tricks.
+    pub fn write_png<W: Write>(&self, writer: W, palette: &[Rgb888]) -> Result<(), EncodingError> {
+        // todo fix
+        // pub fn write_indexed_png(
+        //     path: &str,
+        //     dims: (u32, u32),
+        //     palette: &[([u8; 3], Oklabr)],
+        //     data: &[u8],
+        // ) {
+        // let file = File::create(path).unwrap();
+        // let ref mut w = BufWriter::new(file);
+        let (w, h) = self.dims();
+
+        let mut e = png::Encoder::new(writer, w as u32, h as u32);
+        e.set_source_srgb(SrgbRenderingIntent::RelativeColorimetric);
+        e.set_color(ColorType::Indexed);
+        // the highest level of compression
+        e.set_deflate_compression(DeflateCompression::Level(9));
+
+        let lp = palette.len();
+        let bit_depth = match lp {
+            _ if lp <= 2 => BitDepth::One,
+            _ if lp <= 4 => BitDepth::Two,
+            _ if lp <= 16 => BitDepth::Four,
+            _ if lp <= 256 => BitDepth::Eight,
+            _ => panic!("Palette with {lp} > 256 colour entries was passed in"),
+        };
+        e.set_depth(bit_depth);
+
+        // By the PNG spec, the palette chunk does not need to contain padding
+        // entries up to 256 or whatever. It is fine as long as all the pixels
+        // in the image have a valid palette index.
+        // The palette must be 8-bit RGB.
+        let mut palette_bytes = Vec::<u8>::with_capacity(3*lp);
+        for p in palette {
+            palette_bytes.push(p.r);
+            palette_bytes.push(p.g);
+            palette_bytes.push(p.b);
+        }
+        e.set_palette(palette_bytes);
+        let mut writer = e.write_header()?;
+
+        let data = &self.frames[0];
+
+        // Per the PNG spec, for < 8-bit depth images, rows always start
+        // at a byte boundary (so there is padding of unspecified value
+        // if the width is not a clean multiple). Within a byte, pixels are
+        // laid out where left to right = highest bits to lowest bits.
+        match bit_depth {
+            BitDepth::One => {
+                let w_bytes = w.div_ceil(8);
+                let data_size = 8*w_bytes * h;
+                let mut z = Vec::with_capacity(data_size);
+                for j in 0..h {
+                    for i in 0..w_bytes {
+                        let idx = 8*i;
+                        let mut b = data[(idx,j)] << 7;
+                        if let Some(p) = data.get((idx+1,j)) { b |= p << 6; }
+                        if let Some(p) = data.get((idx+2,j)) { b |= p << 5; }
+                        if let Some(p) = data.get((idx+3,j)) { b |= p << 4; }
+                        if let Some(p) = data.get((idx+4,j)) { b |= p << 3; }
+                        if let Some(p) = data.get((idx+5,j)) { b |= p << 2; }
+                        if let Some(p) = data.get((idx+6,j)) { b |= p << 1; }
+                        if let Some(p) = data.get((idx+7,j)) { b |= p; }
+                        z.push(b);
+                    }
+                }
+                writer.write_image_data(&z)?;
+            },
+            BitDepth::Two => {
+                let w_bytes = w.div_ceil(4);
+                let data_size = 4*w_bytes * h;
+                let mut z = Vec::with_capacity(data_size);
+                for j in 0..h {
+                    for i in 0..w_bytes {
+                        let idx = 4*i;
+                        let mut b = data[(idx,j)] << 6;
+                        if let Some(p) = data.get((idx+1,j)) { b |= p << 4; }
+                        if let Some(p) = data.get((idx+2,j)) { b |= p << 2; }
+                        if let Some(p) = data.get((idx+3,j)) { b |= p; }
+                        z.push(b);
+                    }
+                }
+                writer.write_image_data(&z)?;
+            },
+            BitDepth::Four => {
+                let w_bytes = w.div_ceil(2);
+                let data_size = 2*w_bytes * h;
+                let mut z = Vec::with_capacity(data_size);
+                for j in 0..h {
+                    for i in 0..w_bytes {
+                        let idx = 2*i;
+                        let mut b = data[(idx,j)] << 4;
+                        if let Some(p) = data.get((idx+1,j)) { b |= p; }
+                        z.push(b);
+                    }
+                }
+                writer.write_image_data(&z)?;
+            },
+            BitDepth::Eight => {
+                writer.write_image_data(data.data_1d())?;
+            },
+            BitDepth::Sixteen => unsafe { std::hint::unreachable_unchecked() },
+        }
+
+        Ok(())
     }
 }
+
+
+
 
 
 

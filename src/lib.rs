@@ -5,8 +5,8 @@ mod pximage;
 mod quantise;
 mod vec2d;
 
-pub use color::{Oklabr, Rgb888};
-pub use pximage::{PxImage, write_indexed_png};
+pub use color::{Oklabr, Rgb888, Palette};
+pub use pximage::{PxImage}; // todo: this is to be killed
 pub use dither::{Dither, KnollDither, NoDither};
 pub use quantise::{Quantise};
 pub use vec2d::Vec2D;

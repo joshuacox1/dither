@@ -71,6 +71,19 @@ impl<T> Vec2D<T> {
 
     /// The dimensions of the `Vec2D`, i.e. (row count, column count).
     pub fn dims(&self) -> (usize, usize) { self.dims }
+
+    /// The `Vec2D`'s internal data as a 1D buffer.
+    /// Entries are stored by row, then by column.
+    pub fn data_1d(&self) -> &[T] { &self.data }
+
+    /// Fallible index.
+    pub fn get(&self, coords: (usize, usize)) -> Option<&T> {
+        if self.valid_coords(&coords) {
+            Some(&self.data[self.coords_2d_to_1d(&coords)])
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> Index<(usize, usize)> for Vec2D<T> {

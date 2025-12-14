@@ -3,6 +3,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Write;
 use std::borrow::Cow;
+use std::hash::Hash;
+use std::collections::HashSet;
 
 /// A colour in the Oklab colour space. Uses the revised lightness
 /// estimate L_r described in <https://bottosson.github.io/posts/colorpicker/#intermission---a-new-lightness-estimate-for-oklab>,
@@ -745,6 +747,41 @@ impl Rgb888 {
     }
 }
 
+/// A palette of some pixel type. Guaranteed to have length
+/// between 1 and 256 inclusive.
+pub struct Palette<PixelType>(Vec<PixelType>);
+
+impl<PixelType> Palette<PixelType> {
+    /// Must have between `1` and `256` colours. Otherwise will return
+    /// an error.
+    pub fn new(colours: Vec<PixelType>) -> Result<Self, ()> {
+        let lp = colours.len();
+        if 1 <= lp && lp <= 256 {
+            Ok(Self(colours))
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<PixelType: Ord> Palette<PixelType> {
+    /// Sorts the palette by the `PixelType` partial ordering.
+    pub fn sort(&mut self) {
+        self.0.sort_unstable();
+    }
+}
+
+impl<PixelType: Copy + Eq + Hash> Palette<PixelType> {
+    /// Creates a new palette with duplicates removed. Note
+    /// that the order of the resulting palette is not guaranteed
+    /// and is not deterministic.
+    pub fn remove_duplicates(&self) -> Self {
+        Self(self.0.iter().map(|&c| c)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>())
+    }
+}
 
 #[cfg(test)]
 mod test {
