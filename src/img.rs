@@ -97,6 +97,13 @@ impl<PixelType> Image<PixelType> {
         self.map_frames(|g| g.map(|p| f(p)))
     }
 
+    /// Maps an image transformation function across all pixels in all
+    /// frames.
+    pub fn map_pixels_idx<F, P>(&self, f: F) -> Result<Image<P>, ImageError>
+    where F: Fn((usize, usize), &PixelType) -> P {
+        self.map_frames(|g| g.map_idx(|xy, p| f(xy, p)))
+    }
+
     /// The dimensions of the image.
     pub fn dims(&self) -> (usize, usize) {
         self.frames[0].dims()

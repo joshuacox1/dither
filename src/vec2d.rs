@@ -30,11 +30,33 @@ impl<T> Vec2D<T> {
         self.dims.0 * j + i
     }
 
+    fn coords_1d_to_2d(&self, index: usize) -> (usize, usize) {
+        let width = self.dims.0;
+        let x = index.rem_euclid(width);
+        let y = index.div_euclid(width);
+        (x,y)
+    }
+
     /// Maps over the elements of a `Vec2D`, preserving dimensions.
     pub fn map<F, U>(&self, f: F) -> Vec2D<U>
     where F: Fn(&T) -> U {
         Vec2D {
             data: self.data.iter().map(f).collect::<Vec<_>>(),
+            dims: self.dims,
+        }
+    }
+
+    /// Maps over the elements of a `Vec2D`, preserving dimensions.
+    pub fn map_idx<F, U>(&self, f: F) -> Vec2D<U>
+    where F: Fn((usize, usize), &T) -> U {
+        Vec2D {
+            data: self.data.iter()
+                .enumerate()
+                .map(|(i,p)| {
+                    let xy = self.coords_1d_to_2d(i);
+                    f(xy, p)
+                })
+                .collect::<Vec<_>>(),
             dims: self.dims,
         }
     }
@@ -99,6 +121,23 @@ mod test {
     fn test_index_fail() {
         let vec2d = test_vec2d();
         let _ = vec2d[(1,5)];
+    }
+
+    #[test]
+    fn test_index_1d_to_2d_and_back() {
+        let v = test_vec2d();
+        let expected_2ds = [
+            (0,0),(1,0),(2,0),(3,0),
+            (0,1),(1,1),(2,1),(3,1),
+            (0,2),(1,2),(2,2),(3,2),
+        ];
+        for i in 0..12 {
+            let expected_2d = expected_2ds[i];
+            let actual_2d = v.coords_1d_to_2d(i);
+            let and_back = v.coords_2d_to_1d(&actual_2d);
+            assert_eq!(expected_2d, actual_2d);
+            assert_eq!(i, and_back);
+        }
     }
 
     #[test]

@@ -6,9 +6,11 @@ use super::{Oklabr, Image, Vec2D};
 /// a list of images.
 pub trait Quantise {
     /// Given a slice of images, return a limited palette for use in
-    /// image quantisation. The limited palette must have between
-    /// `1` and `256` colours (though no need to guarantee lack
-    /// of duplicates).
+    /// image quantisation.
+    ///
+    /// Postcondition: the limited palette must have between
+    /// `1` and `256` colours inclusive (though there is no need to
+    /// guarantee uniqueness).
     fn quantise(
         &self,
         images: &[Image<Oklabr>]
