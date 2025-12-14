@@ -12,7 +12,7 @@ pub struct Vec2D<T> {
 // todo: par_iter, or better yet, GPU-stuff
 impl<T> Vec2D<T> {
     /// Creates a `Vec2D` from a 1-dimensional buffer of increasing rows.
-    fn from_1d(data: Vec<T>, dims: (usize, usize)) -> Result<Self, ()> {
+    pub fn from_1d(data: Vec<T>, dims: (usize, usize)) -> Result<Self, ()> {
         if dims.0 * dims.1 == data.len() {
             Ok(Self { data, dims })
         } else {

@@ -1,10 +1,18 @@
 use std::io;
 use image::ImageReader;
 
-use dither::{Oklabr, PxImage};
+use dither::{Oklabr};
 
 fn main() {
-    println!("Hello world!");
+
+
+
+
+
+
+
+
+
     // // //"C:\\Users\\Joshua\\OneDrive\\pictures\\floor_goban.jpg",
     // let mut img = PxImage::from_path(
     //     //"C:\\Users\\Joshua\\OneDrive\\projects\\dither\\test4x4.png");

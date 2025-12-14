@@ -7,6 +7,7 @@ use super::{Vec2D, Rgb888, Palette};
 use png::{Encoder, EncodingError,
     ColorType, SrgbRenderingIntent, DeflateCompression,
     BitDepth};
+use image::ImageReader;
 
 /// An image consisting of one or more frames, each a 2D grid of pixels
 /// (width and height both positive).
@@ -123,6 +124,24 @@ impl Image<Rgb888> {
     /// Reads an image from the given reader
     pub fn read_png<R: Read>(reader: R) -> io::Result<Self> {
         todo!()
+    }
+
+    /// Use the `image` crate's guessing to open whatever.
+    /// Ideally would replace this with something that supports
+    /// PNG only, but handles APNG.
+    /// Also panics on failure instead of handling properly.
+    /// Lots of reasons why this is bad.
+    pub fn read_img_sloppy(s: &str) -> Self {
+        let img = ImageReader::open(s)
+            .unwrap().decode().unwrap()
+            .into_rgb8();
+        let w = img.width() as usize;
+        let h = img.height() as usize;
+        let data = img.pixels()
+            .map(|rgb| Rgb888 { r: rgb[0], g: rgb[1], b: rgb[2] })
+            .collect::<Vec<_>>();
+        let v = Vec2D::from_1d(data, (w, h)).unwrap();
+        Self::single(v).unwrap()
     }
 }
 
