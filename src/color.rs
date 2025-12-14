@@ -28,14 +28,14 @@ impl Oklabr {
 
     /// Converts an `Oklabr` colour to an RGB888 colour, clamping
     /// each RGB channel if the colour is out of gamut. For best results
-    /// it is recommended to call `RgbF32_gamut_map` on the colour first
+    /// it is recommended to call `srgb_gamut_map` on the colour first
     /// to obtain a suitably gamut-mapped `Oklabr` colour.
     pub fn to_rgb888(&self) -> Rgb888 {
-        self.to_RgbF32().to_rgb888()
+        self.to_rgbf32().to_rgb888()
     }
 
     /// Convert to gamma-encoded RGB in the RgbF32 colour space.
-    fn to_RgbF32(&self) -> RgbF32 {
+    fn to_rgbf32(&self) -> RgbF32 {
         let old_l = Self::new_to_old_lightness(self.l);
 
         let l_ = old_l + 0.3963377774f32*self.a + 0.2158037573f32*self.b;
@@ -100,7 +100,7 @@ impl Oklabr {
     /// to it. Otherwise computes a suitably close colour within the
     /// RgbF32 gamut and returns that (owned). TODO: link the gamut
     /// mapping article. This is a highly complex operation.
-    pub fn RgbF32_gamut_map(&self) -> Cow<'_, Self> {
+    pub fn srgb_gamut_map(&self) -> Cow<'_, Self> {
         // todo: make this do something.
         Cow::Borrowed(self)
     }
@@ -654,7 +654,7 @@ impl RgbF32 {
         // revised lightness estimate
         let l_r = Oklabr::old_to_new_lightness(l);
 
-        Oklabr { l: l_r, a, b, }
+        Oklabr { l: l_r, a, b }
     }
 
     /// Converts to RGB 888, clamping within [0.0, 1.0] and rounding.
@@ -746,25 +746,13 @@ mod test {
     use super::*;
 
     #[test]
-    fn oklab_impls() {
+    fn oklab_ord_eq_impls() {
         let c1 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
         let c2 = Oklabr { l: 1.0, a: 0.5, b: 0.75 };
         let c3 = Oklabr { l: 1.0, a: 0.6, b: 0.75 };
         assert!(c1 == c2);
         assert!(c2 <= c3);
         assert!(c2 < c3);
-    }
-
-    // TODO: make sure we're doing gamma the right way round.
-    #[test]
-    fn oklab_makesure() {
-        let c1 = "#ab6519"; let c2 = "#AB6519";
-        let ok1 = Oklabr::from_RgbF32_888_str(c1).unwrap();
-        let ok2 = Oklabr::from_RgbF32_888_str(c2).unwrap();
-        let expected = Oklabr { l: 0.57339257, a: 0.05841787, b: 0.10804674 };
-
-        assert_eq!(expected, ok1);
-        assert_eq!(expected, ok2);
     }
 
     #[test]
@@ -796,8 +784,50 @@ mod test {
 
     #[test]
     fn test_oklabrify() {
-        let color = Rgb888::from_str("#ab6519").to_oklab();
-        let expected = Oklabr { l: 0.50523514, a: 0.05841787, b: 0.10804674 };
+        let color = Rgb888::from_str("#ab6519").unwrap().to_oklabr();
+        let expected = Oklabr { l: 0.50523514, a: 0.05841799, b: 0.10804674 };
         assert_eq!(expected, color);
+    }
+
+    fn assert_eq_eps(a: f32, b: f32, eps: f32) {
+        assert!((a - b).abs() <= eps, "{a} and {b} differed by more than {eps}");
+    }
+
+    fn assert_eq_eps_oklabr(a: &Oklabr, b: &Oklabr, eps: f32) {
+        assert_eq_eps(a.l, b.l, eps);
+        assert_eq_eps(a.a, b.a, eps);
+        assert_eq_eps(a.b, b.b, eps);
+    }
+
+    fn assert_eq_eps_rgbf32(a: &RgbF32, b: &RgbF32, eps: f32) {
+        assert_eq_eps(a.r, b.r, eps);
+        assert_eq_eps(a.g, b.g, eps);
+        assert_eq_eps(a.b, b.b, eps);
+    }
+
+    #[test]
+    fn test_rgb888_oklab_roundtrip() {
+        let rgb888 = Rgb888::from_str("#ab6519").unwrap();
+        let rgbf32 = rgb888.to_rgbf32();
+        let oklabr = rgbf32.to_oklabr();
+        let rgbf32_back = oklabr.to_rgbf32();
+        let rgb888_back = rgbf32_back.to_rgb888();
+
+        let expected_rgbf32 = RgbF32 {
+            r: 0xab as f32 / 255.0,
+            g: 0x65 as f32 / 255.0,
+            b: 0x19 as f32 / 255.0,
+        };
+        let expected_oklabr = Oklabr {
+            l: 0.50523514,
+            a: 0.05841787,
+            b: 0.10804674,
+        };
+
+        let eps = 1.0e-6;
+        assert_eq_eps_rgbf32(&expected_rgbf32, &rgbf32, eps);
+        assert_eq_eps_rgbf32(&expected_rgbf32, &rgbf32_back, eps);
+        assert_eq_eps_oklabr(&expected_oklabr, &oklabr, eps);
+        assert_eq!(rgb888_back, rgb888);
     }
 }

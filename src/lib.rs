@@ -7,7 +7,7 @@ mod vec2d;
 
 pub use color::{Oklabr, Rgb888};
 pub use pximage::{PxImage, write_indexed_png};
-//pub use dither::{Dither};
+pub use dither::{Dither};
 //pub use quantise::{Quantise};
 pub use vec2d::Vec2D;
 pub use img::{Image, ImageError, ImageErrorInfo};
