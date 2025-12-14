@@ -97,16 +97,18 @@ impl<PixelType> Image<PixelType> {
 
     /// Maps an image transformation function across all pixels in all
     /// frames.
-    pub fn map_pixels<F, P>(&self, f: F) -> Result<Image<P>, ImageError>
+    pub fn map_pixels<F, P>(&self, f: F) -> Image<P>
     where F: Fn(&PixelType) -> P {
-        self.map_frames(|g| g.map(|p| f(p)))
+        // Unwrap here is safe because the frame map preserves frame
+        // dimensions and hence the whole image is valid.
+        self.map_frames(|g| g.map(|p| f(p))).unwrap()
     }
 
     /// Maps an image transformation function across all pixels in all
     /// frames.
-    pub fn map_pixels_idx<F, P>(&self, f: F) -> Result<Image<P>, ImageError>
+    pub fn map_pixels_idx<F, P>(&self, f: F) -> Image<P>
     where F: Fn((usize, usize), &PixelType) -> P {
-        self.map_frames(|g| g.map_idx(|xy, p| f(xy, p)))
+        self.map_frames(|g| g.map_idx(|xy, p| f(xy, p))).unwrap()
     }
 
     /// The dimensions of the image.
@@ -156,15 +158,8 @@ impl Image<u8> {
     /// Further work is to write a valid APNG with all the frames.
     /// Further further work is to optimise that APNG with tricks.
     pub fn write_png<W: Write>(&self, writer: W, palette: &Palette<Rgb888>) -> Result<(), EncodingError> {
-        // todo fix
-        // pub fn write_indexed_png(
-        //     path: &str,
-        //     dims: (u32, u32),
-        //     palette: &[([u8; 3], Oklabr)],
-        //     data: &[u8],
-        // ) {
         // let file = File::create(path).unwrap();
-        // let ref mut w = BufWriter::new(file);
+        // let ref mut w = BufWriter::new(file); todo: delete
         let (w, h) = self.dims();
 
         let mut e = png::Encoder::new(writer, w as u32, h as u32);

@@ -1,11 +1,32 @@
-use std::io;
+use std::io::{Write, BufWriter};
+use std::fs::File;
 use image::ImageReader;
 
-use dither::{Oklabr};
+use dither::{Oklabr, Image, Rgb888, NoDither, KnollDither,
+    Palette, Dither};
 
 fn main() {
+    let imgpath = "/Users/joshua/OneDrive/projects/dither/ylscene.png";
+    let img = Image::<Rgb888>::read_img_sloppy(imgpath)
+        .map_pixels(|rgb| rgb.to_oklabr());
 
+    let palette_rgb888 = Palette::new([
+        "#080000", "#201A0B", "#432817", "#492910",
+        "#234309", "#5D4F1E", "#9c6b20", "#a9220f",
+        "#2b347c", "#2b7409", "#d0ca40", "#e8a077",
+        "#6a94ab", "#d5c4b3", "#fce76e", "#fcfae2",
+    ].into_iter()
+        .map(|s| Rgb888::from_str(s).unwrap())
+        .collect::<Vec<_>>()
+    ).unwrap();
+    let palette_oklabr = palette_rgb888.map(|rgb| rgb.to_oklabr());
 
+    let dither_impl = KnollDither::new(8, 0.3).unwrap();
+    let dithered_img = dither_impl.dither(&img, &palette_oklabr);
+
+    let file = File::create("output.png").unwrap();
+    let ref mut w = BufWriter::new(file);
+    dithered_img.write_png(w, &palette_rgb888);
 
 
 

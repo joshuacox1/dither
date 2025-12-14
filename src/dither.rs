@@ -49,7 +49,7 @@ impl Dither for NoDither {
                 .min_by(|(_,p),(_,q)| p.sq_dist(&px)
                     .total_cmp(&q.sq_dist(&px)))
                 .unwrap().0 as u8
-        }).unwrap()
+        })
     }
 }
 
@@ -115,7 +115,7 @@ impl Dither for KnollDither {
             let candidates = self.knoll_dither_inner(palette, p);
             let bayer_index = BAYER_16[j % 16][i % 16] as usize / bayer_divisor;
             candidates[bayer_index]
-        }).unwrap()
+        })
     }
 }
 
