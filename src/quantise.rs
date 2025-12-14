@@ -1,42 +1,21 @@
 use std::borrow::Cow;
 
-use super::{Oklabr, Image, Vec2D};
+use super::{Oklabr, Image, Vec2D, Palette};
 
 /// A trait for extracting a representative limited palette from
 /// a list of images.
 pub trait Quantise {
     /// Given a slice of images, return a limited palette for use in
     /// image quantisation.
-    ///
-    /// Postcondition: the limited palette must have between
-    /// `1` and `256` colours inclusive (though there is no need to
-    /// guarantee uniqueness).
     fn quantise(
         &self,
         images: &[Image<Oklabr>]
-    ) -> Cow<'_, [Oklabr]>;
+    ) -> Cow<'_, Palette<Oklabr>>;
 }
 
-/// The trivial quantisation method of providing an explicit palette.
-pub struct ExplicitPalette {
-    palette: Vec<Oklabr>,
-}
-
-impl ExplicitPalette {
-    /// `colours` must have between `1` and `256` members inclusive.
-    pub fn new(palette: Vec<Oklabr>) -> Result<Self, ()> {
-        let l_p = palette.len();
-        if 1 <= l_p && l_p <= 256 && palette.iter().all(|p| p.is_well_formed()) {
-            Ok(Self { palette })
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl Quantise for ExplicitPalette {
-    fn quantise(&self, images: &[Image<Oklabr>]) -> Cow<'_, [Oklabr]> {
-        Cow::from(&self.palette)
+impl Quantise for Palette<Oklabr> {
+    fn quantise(&self, images: &[Image<Oklabr>]) -> Cow<'_, Palette<Oklabr>> {
+        Cow::Borrowed(&self)
     }
 }
 
@@ -59,7 +38,7 @@ impl KmeansClustering {
 }
 
 impl Quantise for KmeansClustering {
-    fn quantise(&self, images: &[Image<Oklabr>]) -> Cow<'_, [Oklabr]> {
+    fn quantise(&self, images: &[Image<Oklabr>]) -> Cow<'_, Palette<Oklabr>> {
         todo!()
     }
 }

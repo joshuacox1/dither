@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign, Div, DivAssign, Mul, MulAssign};
+use std::ops::{Deref, Add, AddAssign, Sub, SubAssign, Div, DivAssign, Mul, MulAssign};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Write;
@@ -749,6 +749,7 @@ impl Rgb888 {
 
 /// A palette of some pixel type. Guaranteed to have length
 /// between 1 and 256 inclusive.
+#[derive(Debug, Clone)]
 pub struct Palette<PixelType>(Vec<PixelType>);
 
 impl<PixelType> Palette<PixelType> {
@@ -761,6 +762,12 @@ impl<PixelType> Palette<PixelType> {
         } else {
             Err(())
         }
+    }
+
+    /// Maps the palette to a new colour type.
+    pub fn map<F, P>(&self, f: F) -> Palette<P>
+    where F: Fn(&PixelType) -> P {
+        Palette(self.0.iter().map(f).collect::<Vec<_>>())
     }
 }
 
@@ -780,6 +787,14 @@ impl<PixelType: Copy + Eq + Hash> Palette<PixelType> {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>())
+    }
+}
+
+impl<T> Deref for Palette<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

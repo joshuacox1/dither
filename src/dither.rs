@@ -1,4 +1,4 @@
-use super::{Image, Oklabr};
+use super::{Image, Oklabr, Palette};
 
 /// A trait for dithering algorithms.
 pub trait Dither {
@@ -12,7 +12,7 @@ pub trait Dither {
     /// Postconditions:
     /// - The returned image has the same dimensions as `image`.
     /// - Each `u8` index entry is a valid index into `palette`.
-    fn dither(&self, image: &Image<Oklabr>, palette: &[Oklabr]) -> Image<u8>;
+    fn dither(&self, image: &Image<Oklabr>, palette: &Palette<Oklabr>) -> Image<u8>;
 
     /// Dithers multiple images with the provided palette. The
     /// default implementation is to call `Dither::dither` on each
@@ -22,7 +22,7 @@ pub trait Dither {
     fn dither_mult(
         &self,
         images: &[Image<Oklabr>],
-        palette: &[Oklabr],
+        palette: &Palette<Oklabr>,
     ) -> Vec<Image<u8>> {
         images.iter()
             .map(|im| self.dither(im, palette))
@@ -39,7 +39,7 @@ impl Dither for NoDither {
     fn dither(
         &self,
         image: &Image<Oklabr>,
-        palette: &[Oklabr],
+        palette: &Palette<Oklabr>,
     ) -> Image<u8> {
         // TODO: Consider implementing a kd-tree for faster nearest
         // neighbour comparisons.
@@ -80,7 +80,7 @@ impl KnollDither {
 
     fn knoll_dither_inner(
         &self,
-        palette: &[Oklabr],
+        palette: &Palette<Oklabr>,
         pixel: &Oklabr,
     ) -> Vec<u8> {
         let n = self.num_samples as usize;
@@ -107,7 +107,7 @@ impl Dither for KnollDither {
     fn dither(
         &self,
         image: &Image<Oklabr>,
-        palette: &[Oklabr],
+        palette: &Palette<Oklabr>,
     ) -> Image<u8> {
         let bayer_divisor = (256 / self.num_samples) as usize;
         // select relevant bayer matrix?

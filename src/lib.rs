@@ -8,25 +8,9 @@ mod vec2d;
 pub use color::{Oklabr, Rgb888, Palette};
 pub use pximage::{PxImage}; // todo: this is to be killed
 pub use dither::{Dither, KnollDither, NoDither};
-pub use quantise::{Quantise};
+pub use quantise::{Quantise, KmeansClustering};
 pub use vec2d::Vec2D;
 pub use img::{Image, ImageError, ImageErrorInfo};
-
-// TODO: delete
-// #[derive(Debug, Clone)]
-// pub enum PaletteOptions {
-//     /// An explicit list of (unique) colours.
-//     Explicit(Vec<Oklabr>),
-//     /// Automatically selects a palette based on the input image.
-//     /// (Uses k-means clustering with kmeans++ initialisation.)
-//     Auto {
-//         /// The number of colors in the image. Zero is an invalid value.
-//         num_colors: u8,
-//         /// A seed for the random number generator used in palette
-//         /// generation.
-//         random_seed: u64,
-//     },
-// }
 
 #[derive(Debug, Clone)]
 pub struct DitherOptions {

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::io;
 
-use super::{Vec2D, Rgb888};
+use super::{Vec2D, Rgb888, Palette};
 
 use png::{Encoder, EncodingError,
     ColorType, SrgbRenderingIntent, DeflateCompression,
@@ -130,13 +130,13 @@ impl Image<u8> {
     /// Writes an indexed image with the given palette to the PNG format.
     /// The PNG will have indexed colour type with as few bits as possible
     /// (1-bit if <= 2 colours, 2-bit if <= 4 colours, 4-bit if <= 16 colours,
-    /// 8-bit if <= 256 colours). The palette size must be between 1 and 256.
+    /// 8-bit if <= 256 colours).
     /// Throws an error if a pixel is OOB? Or just writes an invalid PNG?
     ///
     /// NOTE: This currently only writes out the first frame. APNG is not supported.
     /// Further work is to write a valid APNG with all the frames.
     /// Further further work is to optimise that APNG with tricks.
-    pub fn write_png<W: Write>(&self, writer: W, palette: &[Rgb888]) -> Result<(), EncodingError> {
+    pub fn write_png<W: Write>(&self, writer: W, palette: &Palette<Rgb888>) -> Result<(), EncodingError> {
         // todo fix
         // pub fn write_indexed_png(
         //     path: &str,
@@ -169,7 +169,7 @@ impl Image<u8> {
         // in the image have a valid palette index.
         // The palette must be 8-bit RGB.
         let mut palette_bytes = Vec::<u8>::with_capacity(3*lp);
-        for p in palette {
+        for p in palette.iter() {
             palette_bytes.push(p.r);
             palette_bytes.push(p.g);
             palette_bytes.push(p.b);
