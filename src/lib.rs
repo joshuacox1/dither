@@ -5,7 +5,7 @@ mod quantise;
 mod vec2d;
 
 pub use color::{Oklabr, Rgb888, Palette};
-pub use dither::{Dither, KnollDither, NoDither};
+pub use dither::{Dither, KnollDither, NoDither, ErrorDiffusionDither};
 pub use quantise::{Quantise, KmeansClustering};
 pub use vec2d::Vec2D;
 pub use img::{Image, ImageError, ImageErrorInfo};

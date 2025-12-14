@@ -84,6 +84,16 @@ impl<T> Vec2D<T> {
             None
         }
     }
+
+    /// Fallible indexmut.
+    pub fn get_mut(&mut self, coords: (usize, usize)) -> Option<&mut T> {
+        if self.valid_coords(&coords) {
+            let idx = self.coords_2d_to_1d(&coords);
+            Some(&mut self.data[idx])
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> Index<(usize, usize)> for Vec2D<T> {

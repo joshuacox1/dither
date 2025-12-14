@@ -3,7 +3,7 @@ use std::fs::File;
 use image::ImageReader;
 
 use dither::{Oklabr, Image, Rgb888, NoDither, KnollDither,
-    Palette, Dither};
+    Palette, Dither, ErrorDiffusionDither};
 
 fn main() {
     let imgpath = "/Users/joshua/OneDrive/projects/dither/ylscene.png";
@@ -11,6 +11,7 @@ fn main() {
         .map_pixels(|rgb| rgb.to_oklabr());
 
     let palette_rgb888 = Palette::new([
+        // "#000000", "#ffffff",
         "#080000", "#201A0B", "#432817", "#492910",
         "#234309", "#5D4F1E", "#9c6b20", "#a9220f",
         "#2b347c", "#2b7409", "#d0ca40", "#e8a077",
@@ -21,12 +22,13 @@ fn main() {
     ).unwrap();
     let palette_oklabr = palette_rgb888.map(|rgb| rgb.to_oklabr());
 
-    let dither_impl = KnollDither::new(8, 0.3).unwrap();
+    let dither_impl = KnollDither::new(8, 0.4).unwrap();
+    // let dither_impl = ErrorDiffusionDither::FloydSteinberg;
     let dithered_img = dither_impl.dither(&img, &palette_oklabr);
 
     let file = File::create("output.png").unwrap();
     let ref mut w = BufWriter::new(file);
-    dithered_img.write_png(w, &palette_rgb888);
+    dithered_img.write_png(w, &palette_rgb888).unwrap();
 
 
 

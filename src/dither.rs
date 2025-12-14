@@ -1,4 +1,4 @@
-use super::{Image, Oklabr, Palette};
+use super::{Image, Oklabr, Palette, Vec2D};
 
 /// A trait for dithering algorithms.
 pub trait Dither {
@@ -41,15 +41,7 @@ impl Dither for NoDither {
         image: &Image<Oklabr>,
         palette: &Palette<Oklabr>,
     ) -> Image<u8> {
-        // TODO: Consider implementing a kd-tree for faster nearest
-        // neighbour comparisons.
-        // TODO: par-iter everything. Or implement on the GPU?
-        image.map_pixels(|px| {
-            palette.iter().enumerate()
-                .min_by(|(_,p),(_,q)| p.sq_dist(&px)
-                    .total_cmp(&q.sq_dist(&px)))
-                .unwrap().0 as u8
-        })
+        image.map_pixels(|px| palette.nearest_neighbour(px) as u8)
     }
 }
 
@@ -88,11 +80,8 @@ impl KnollDither {
         let mut error = Oklabr { l: 0.0, a: 0.0, b: 0.0 };
         for it in 0..n {
             let attempt = pixel + error * self.strength;
-            let (argclosest, closest) = palette.iter().enumerate()
-                .min_by(|(_,p),(_,q)| p.sq_dist(&attempt)
-                    .total_cmp(&q.sq_dist(&attempt)))
-                .unwrap();
-            error += pixel - closest;
+            let argclosest = palette.nearest_neighbour(&attempt);
+            error += pixel - palette[argclosest];
             candidates.push(argclosest as u8);
         }
 
@@ -141,3 +130,76 @@ const BAYER_16: [[u8; 16]; 16] = [
     [255, 127, 223, 95, 247, 119, 215, 87, 253, 125, 221, 93, 245, 117, 213, 85],
 ];
 
+/// Implements error-diffusion dithering.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ErrorDiffusionDither {
+    /// blah.
+    FloydSteinberg,
+    /// blah.
+    JarvisJudiceNinke,
+}
+
+impl Dither for ErrorDiffusionDither {
+    fn dither(
+        &self,
+        image: &Image<Oklabr>,
+        palette: &Palette<Oklabr>,
+    ) -> Image<u8> {
+        let diffusion_map = match self {
+            ErrorDiffusionDither::FloydSteinberg => FLOYD_STEINBERG.as_slice(),
+            ErrorDiffusionDither::JarvisJudiceNinke => JARVIS_JUDICE_NINKE.as_slice(),
+        };
+
+        image.map_frames(|frame| {
+            let mut buf = frame.clone();
+            let (w, h) = buf.dims();
+            let mut result_1d = Vec::with_capacity(w*h);
+            for j in 0..h {
+                for i in 0..w {
+                    let old_px = buf[(i,j)];
+                    let new_px = palette.nearest_neighbour(&old_px);
+                    result_1d.push(new_px as u8);
+                    let error = old_px - palette[new_px]; // reverse error
+
+                    for ((i_offset, j_offset), coeff) in diffusion_map.iter() {
+                        let new_i = i.checked_add_signed(*i_offset);
+                        let new_j = j.checked_add_signed(*j_offset);
+                        match (new_i, new_j) {
+                            (Some(new_i), Some(new_j)) => {
+                                if let Some(px_) = buf.get_mut((new_i, new_j)) {
+                                    *px_ += error * coeff;
+                                }
+                            },
+                            _ => (),
+                        };
+                    }
+                }
+            }
+
+            Vec2D::from_1d(result_1d, (w, h)).unwrap()
+        }).unwrap()
+    }
+}
+
+
+const FLOYD_STEINBERG: [((isize, isize), f32); 4] = [
+    ((1,0), 7.0/16.0),
+    ((-1,1), 3.0/16.0),
+    ((0,1), 5.0/16.0),
+    ((1,1), 1.0/16.0),
+];
+
+const JARVIS_JUDICE_NINKE: [((isize, isize), f32); 12] = [
+    ((1,0), 7.0/48.0),
+    ((2,0), 5.0/48.0),
+    ((-2,1), 3.0/48.0),
+    ((-1,1), 5.0/48.0),
+    ((0,1), 7.0/48.0),
+    ((1,1), 5.0/48.0),
+    ((2,1), 3.0/48.0),
+    ((-2,2), 1.0/48.0),
+    ((-1,2), 3.0/48.0),
+    ((0,2), 5.0/48.0),
+    ((1,2), 3.0/48.0),
+    ((2,2), 1.0/48.0),
+];

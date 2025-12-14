@@ -4,10 +4,12 @@ use std::io;
 
 use super::{Vec2D, Rgb888, Palette};
 
-use png::{Encoder, EncodingError,
+use png::{
+    Encoder, EncodingError,
     ColorType, SrgbRenderingIntent, DeflateCompression,
     BitDepth};
 use image::ImageReader;
+use log::debug;
 
 /// An image consisting of one or more frames, each a 2D grid of pixels
 /// (width and height both positive).
@@ -158,8 +160,6 @@ impl Image<u8> {
     /// Further work is to write a valid APNG with all the frames.
     /// Further further work is to optimise that APNG with tricks.
     pub fn write_png<W: Write>(&self, writer: W, palette: &Palette<Rgb888>) -> Result<(), EncodingError> {
-        // let file = File::create(path).unwrap();
-        // let ref mut w = BufWriter::new(file); todo: delete
         let (w, h) = self.dims();
 
         let mut e = png::Encoder::new(writer, w as u32, h as u32);
@@ -176,6 +176,7 @@ impl Image<u8> {
             _ if lp <= 256 => BitDepth::Eight,
             _ => panic!("Palette with {lp} > 256 colour entries was passed in"),
         };
+        debug!("Image has a palette length of {lp}; using bit depth of {bit_depth:?}");
         e.set_depth(bit_depth);
 
         // By the PNG spec, the palette chunk does not need to contain padding

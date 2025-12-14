@@ -798,6 +798,20 @@ impl<T> Deref for Palette<T> {
     }
 }
 
+impl Palette<Oklabr> {
+    /// Returns the index of the nearest palette neighbour to
+    /// the given colour.
+    /// This performs a linear scan. For higher performance,
+    /// consider creating a `KdTree` out of the palette (will
+    /// add this later).
+    pub fn nearest_neighbour(&self, colour: &Oklabr) -> usize {
+        self.0.iter().enumerate()
+            .min_by(|(_,p),(_,q)| p.sq_dist(colour)
+                .total_cmp(&q.sq_dist(colour)))
+            .unwrap().0
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
