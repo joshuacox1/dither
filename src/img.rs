@@ -84,10 +84,17 @@ impl<PixelType> Image<PixelType> {
         self.frames.get(idx)
     }
 
-    /// Maps an image transformation function across images. (dims?)
+    /// Maps an image transformation function across all image frames.
     pub fn map_frames<F, P>(&self, f: F) -> Result<Image<P>, ImageError>
     where F: Fn(&Vec2D<PixelType>) -> Vec2D<P> {
         Image::from_frames(self.frames.iter().map(f).collect::<Vec<_>>())
+    }
+
+    /// Maps an image transformation function across all pixels in all
+    /// frames.
+    pub fn map_pixels<F, P>(&self, f: F) -> Result<Image<P>, ImageError>
+    where F: Fn(&PixelType) -> P {
+        self.map_frames(|g| g.map(|p| f(p)))
     }
 
     /// The dimensions of the image.
