@@ -117,6 +117,9 @@ impl<PixelType> Image<PixelType> {
     pub fn dims(&self) -> (usize, usize) {
         self.frames[0].dims()
     }
+
+    /// The image frames.
+    pub fn frames(&self) -> &[Vec2D<PixelType>] { &self.frames }
 }
 
 impl Image<Rgb888> {

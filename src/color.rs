@@ -810,6 +810,15 @@ impl Palette<Oklabr> {
                 .total_cmp(&q.sq_dist(colour)))
             .unwrap().0
     }
+
+    /// Snaps to RGB888. TODO: SRGB gamut mapping.
+    pub fn snap_to_unique_srgb888(&self) -> Self {
+        Self(self.0.iter().map(|c| c.to_rgb888())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .map(|c| c.to_oklabr())
+            .collect::<Vec<_>>())
+    }
 }
 
 #[cfg(test)]
