@@ -132,22 +132,22 @@ const BAYER_16: [[u8; 16]; 16] = [
 
 /// Implements error-diffusion dithering.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ErrorDiffusionDither {
+pub enum ErrorDiffusion {
     /// blah.
     FloydSteinberg,
     /// blah.
     JarvisJudiceNinke,
 }
 
-impl Dither for ErrorDiffusionDither {
+impl Dither for ErrorDiffusion {
     fn dither(
         &self,
         image: &Image<Oklabr>,
         palette: &Palette<Oklabr>,
     ) -> Image<u8> {
         let diffusion_map = match self {
-            ErrorDiffusionDither::FloydSteinberg => FLOYD_STEINBERG.as_slice(),
-            ErrorDiffusionDither::JarvisJudiceNinke => JARVIS_JUDICE_NINKE.as_slice(),
+            ErrorDiffusion::FloydSteinberg => FLOYD_STEINBERG.as_slice(),
+            ErrorDiffusion::JarvisJudiceNinke => JARVIS_JUDICE_NINKE.as_slice(),
         };
 
         image.map_frames(|frame| {
