@@ -74,12 +74,12 @@ fn main() {
     //     .map(|s| Rgb888::from_str(s).unwrap())
     //     .collect::<Vec<_>>()).unwrap().map(|rgb| rgb.to_oklabr());
 
-    let imgpath = "/Users/joshua/OneDrive/projects/dither/blossom.jpg";
+    let imgpath = "/Users/joshua/OneDrive/projects/dither/ken.png";
     let img = Image::<Rgb888>::read_img_sloppy(imgpath)
         .map_pixels(|rgb| rgb.to_oklabr());
 
     // let quantise_impl = cat_palette;
-    let quantise_impl = KmeansClustering::new(16, 0xdeadbeef).unwrap();
+    let quantise_impl = KmeansClustering::new(17, 0xdeadbeef).unwrap();
     let palette = quantise_impl.quantise(&img);
     let mut palette = palette.snap_to_unique_srgb888();
     palette.sort();
@@ -98,8 +98,8 @@ fn main() {
     // let palette_oklabr = palette_rgb888.map(|rgb| rgb.to_oklabr());
 
     // let dither_impl = NoDither;
-    // let dither_impl = KnollDither::new(8, 1.0/3.0).unwrap();
-    let dither_impl = ErrorDiffusion::FloydSteinberg;
+    let dither_impl = KnollDither::new(16, 0.1).unwrap();
+    // let dither_impl = ErrorDiffusion::FloydSteinberg;
     let dithered_img = dither_impl.dither(&img, &palette);
 
     let file = File::create("output.png").unwrap();
@@ -108,7 +108,18 @@ fn main() {
     dithered_img.write_png(w, &palette_rgb888).unwrap();
 
 
-    for rgb in palette_rgb888.iter() {
-        println!("\"{}\",", rgb.to_str());
+    for (i, (oklabr, rgb)) in palette.iter().zip(palette_rgb888.iter()).enumerate() {
+        if i == 0 {
+            println!("<tr>");
+        } else if i % 4 == 0 {
+            println!("</tr>\n<tr>");
+        }
+        let w_or_b = oklabr.white_or_black_most_contrast().to_rgb888().to_str();
+        let color_str = rgb.to_str();
+        println!("  <td><span style=\"background-color: {color_str}; color: {w_or_b};\">&nbsp;{color_str}&nbsp;</span></td>");
     }
+    println!("</tr>");
+
+    let q = Rgb888::from_str("#070000").unwrap().to_oklabr();
+    println!("{:?}, {}", q, q.l());
 }
